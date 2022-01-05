@@ -171,12 +171,14 @@ static void worker(
                     throw EvalError("derivation must have a 'system' attribute");
 
                 auto drvPath = drv->queryDrvPath();
+		auto outPath = drv->queryOutPath();
                 auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
                 auto storePath = localStore->parseStorePath(drvPath);
 
                 reply["name"] = drv->queryName();
                 reply["system"] = drv->querySystem();
                 reply["drvPath"] = drvPath;
+		reply["outPath"] = outPath;
                 reply["storePath"] = localStore->printStorePath(storePath);
 
                 nlohmann::json meta;
