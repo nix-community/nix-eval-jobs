@@ -234,12 +234,7 @@ static void worker(
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
                 for (auto & i : v->attrs->lexicographicOrder()) {
-                    std::string name(i->name);
-                    if (name.find('.') != std::string::npos || name.find(' ') != std::string::npos) {
-                        printError("skipping job with illegal name '%s'", name);
-                        continue;
-                    }
-                    attrs.push_back(name);
+                    attrs.push_back(i->name);
                 }
                 reply["attrs"] = std::move(attrs);
             }
