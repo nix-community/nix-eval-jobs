@@ -207,7 +207,7 @@ int main(int argc, char * * argv)
 
         struct State
         {
-            std::set<std::string> todo{""};
+            std::set<std::string> todo{};
             std::set<std::string> active;
             std::exception_ptr exc;
         };
@@ -320,6 +320,18 @@ int main(int argc, char * * argv)
                 wakeup.notify_all();
             }
         };
+
+        EvalState initialState(myArgs.searchPath, openStore());
+        Bindings & autoArgs = *myArgs.getAutoArgs(initialState);
+
+        auto topLevelValue = releaseExprTopLevelValue(initialState, autoArgs);
+
+        if (topLevelValue->type == tAttrs) {
+          auto state(state_.lock());
+          for (auto & a : topLevelValue->attrs->lexicographicOrder()) {
+            state->todo.insert(a->name);
+          }
+        }
 
         std::vector<std::thread> threads;
         for (size_t i = 0; i < myArgs.nrWorkers; i++)
