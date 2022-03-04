@@ -11,8 +11,6 @@
 #include <nix/get-drvs.hh>
 #include <nix/globals.hh>
 #include <nix/common-eval-args.hh>
-#include <nix/flake/flakeref.hh>
-#include <nix/flake/flake.hh>
 #include <nix/attr-path.hh>
 #include <nix/derivations.hh>
 #include <nix/local-store.hh>
@@ -31,18 +29,14 @@
 
 using namespace nix;
 
-typedef enum { evalAuto, evalImpure, evalPure } pureEval;
-
 struct MyArgs : MixEvalArgs, MixCommonArgs
 {
     Path releaseExpr;
     Path gcRootsDir;
-    bool flake = false;
     bool meta = false;
     bool showTrace = false;
     size_t nrWorkers = 1;
     size_t maxMemorySize = 4096;
-    pureEval evalMode = evalAuto;
 
     MyArgs() : MixCommonArgs("nix-eval-jobs")
     {
@@ -95,12 +89,6 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
         });
 
         addFlag({
-            .longName = "flake",
-            .description = "build a flake",
-            .handler = {&flake, true}
-        });
-
-        addFlag({
             .longName = "meta",
             .description = "include derivation meta field in output",
             .handler = {&meta, true}
@@ -127,37 +115,7 @@ static void worker(
 {
     Value vTop;
 
-    if (myArgs.flake) {
-        using namespace flake;
-
-        auto [flakeRef, fragment] = parseFlakeRefWithFragment(myArgs.releaseExpr, absPath("."));
-
-        auto vFlake = state.allocValue();
-
-        auto lockedFlake = lockFlake(state, flakeRef,
-            LockFlags {
-                .updateLockFile = false,
-                .useRegistries = false,
-                .allowMutable = false,
-            });
-
-        callFlake(state, lockedFlake, *vFlake);
-
-        auto vOutputs = vFlake->attrs->get(state.symbols.create("outputs"))->value;
-        state.forceValue(*vOutputs);
-        vTop = *vOutputs;
-
-        if (fragment.length() > 0) {
-            Bindings & bindings(*state.allocBindings(0));
-            auto [nTop, pos] = findAlongAttrPath(state, fragment, bindings, vTop);
-            if (!nTop)
-                throw Error("error: attribute '%s' missing", nTop);
-            vTop = *nTop;
-        }
-
-    } else {
-        state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
-    }
+    state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
 
     auto vRoot = state.allocValue();
     state.autoCallFunction(autoArgs, vTop, *vRoot);
@@ -303,10 +261,6 @@ int main(int argc, char * * argv)
         /* Prevent access to paths outside of the Nix search path and
            to the environment. */
         evalSettings.restrictEval = false;
-
-        /* When building a flake, use pure evaluation (no access to
-           'getEnv', 'currentSystem' etc. */
-        evalSettings.pureEval = myArgs.evalMode == evalAuto ? myArgs.flake : myArgs.evalMode == evalPure;
 
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
