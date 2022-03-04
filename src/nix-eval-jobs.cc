@@ -32,73 +32,48 @@ using namespace nix;
 struct MyArgs : MixEvalArgs, MixCommonArgs
 {
     Path releaseExpr;
-    Path gcRootsDir;
-    bool meta = false;
     bool showTrace = false;
     size_t nrWorkers = 1;
     size_t maxMemorySize = 4096;
 
     MyArgs() : MixCommonArgs("nix-eval-jobs")
     {
-        addFlag({
-            .longName = "help",
-            .description = "show usage information",
-            .handler = {[&]() {
-                printf("USAGE: nix-eval-jobs [options] expr\n\n");
-                for (const auto & [name, flag] : longFlags) {
-                    if (hiddenCategories.count(flag->category)) {
-                        continue;
-                    }
-                    printf("  --%-20s %s\n", name.c_str(), flag->description.c_str());
+      mkFlag()
+        .longName("help")
+        .description("show usage information")
+        .handler({[&]() {
+            printf("USAGE: nix-eval-jobs [options] expr\n\n");
+            for (const auto & [name, flag] : longFlags) {
+                if (hiddenCategories.count(flag->category)) {
+                    continue;
                 }
-                ::exit(0);
-            }},
-        });
+                printf("  --%-20s %s\n", name.c_str(), flag->description.c_str());
+            }
+            ::exit(0);
+        }});
 
-        addFlag({
-            .longName = "impure",
-            .description = "set evaluation mode",
-            .handler = {[&]() {
-                evalMode = evalImpure;
-            }},
-        });
+        mkFlag()
+          .longName("workers")
+          .description("number of evaluate workers")
+          .labels({"workers"})
+          .handler({[=](std::string s) {
+            nrWorkers = std::stoi(s);
+          }});
 
-        addFlag({
-            .longName = "gc-roots-dir",
-            .description = "garbage collector roots directory",
-            .labels = {"path"},
-            .handler = {&gcRootsDir}
-        });
+        mkFlag()
+          .longName("max-memory-size")
+          .description("maximum evaluation memory size")
+          .labels({"size"})
+          .handler({[=](std::string s) {
+            maxMemorySize = std::stoi(s);
+          }});
 
-        addFlag({
-            .longName = "workers",
-            .description = "number of evaluate workers",
-            .labels = {"workers"},
-            .handler = {[=](std::string s) {
-                nrWorkers = std::stoi(s);
-            }}
-        });
-
-        addFlag({
-            .longName = "max-memory-size",
-            .description = "maximum evaluation memory size",
-            .labels = {"size"},
-            .handler = {[=](std::string s) {
-                maxMemorySize = std::stoi(s);
-            }}
-        });
-
-        addFlag({
-            .longName = "meta",
-            .description = "include derivation meta field in output",
-            .handler = {&meta, true}
-        });
-
-        addFlag({
-            .longName = "show-trace",
-            .description = "print out a stack trace in case of evaluation errors",
-            .handler = {&showTrace, true}
-        });
+        mkFlag()
+          .longName("show-trace")
+          .description("print out a stack trace in case of evaluation errors")
+          .handler({[=](std::string s){
+            showTrace = "true" == s;
+          }});
 
         expectArg("expr", &releaseExpr);
     }
@@ -110,8 +85,7 @@ static void worker(
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
-    AutoCloseFD & from,
-    const Path &gcRootsDir)
+    AutoCloseFD & from)
 {
     Value vTop;
 
@@ -168,35 +142,6 @@ static void worker(
                 reply["drvPath"] = drvPath;
                 for (auto out : outputs){
                     reply["outputs"][out.first] = out.second;
-                }
-
-                if (myArgs.meta) {
-                    nlohmann::json meta;
-                    for (auto & name : drv->queryMetaNames()) {
-                      PathSet context;
-                      std::stringstream ss;
-
-                      auto metaValue = drv->queryMeta(name);
-                      // Skip non-serialisable types
-                      // TODO: Fix serialisation of derivations to store paths
-                      if (metaValue == 0) {
-                        continue;
-                      }
-
-                      printValueAsJSON(state, true, *metaValue, noPos, ss, context);
-                      nlohmann::json field = nlohmann::json::parse(ss.str());
-                      meta[name] = field;
-                    }
-                    reply["meta"] = meta;
-                }
-
-                /* Register the derivation as a GC root.  !!! This
-                   registers roots for jobs that we may have already
-                   done. */
-                if (gcRootsDir != "") {
-                    Path root = gcRootsDir + "/" + std::string(baseNameOf(drvPath));
-                    if (!pathExists(root))
-                        localStore->addPermRoot(storePath, root);
                 }
 
             }
@@ -264,8 +209,6 @@ int main(int argc, char * * argv)
 
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
-        if (myArgs.gcRootsDir == "") printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
-
         if (myArgs.showTrace) {
             loggerSettings.showTrace.assign(true);
         }
@@ -304,7 +247,7 @@ int main(int argc, char * * argv)
                                 try {
                                     EvalState state(myArgs.searchPath, openStore());
                                     Bindings & autoArgs = *myArgs.getAutoArgs(state);
-                                    worker(state, autoArgs, *to, *from, myArgs.gcRootsDir);
+                                    worker(state, autoArgs, *to, *from);
                                 } catch (Error & e) {
                                     nlohmann::json err;
                                     auto msg = e.msg();
