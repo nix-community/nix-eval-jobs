@@ -15,9 +15,11 @@
 #include <nix/flake/flake.hh>
 #include <nix/attr-path.hh>
 #include <nix/derivations.hh>
-#include <nix/local-fs-store.hh>
+#include <nix/local-store.hh>
 #include <nix/logging.hh>
-#include <nix/error.hh>
+#include <nix/types.hh>
+#include <nix/symbol-table.hh>
+#include <nix/value.hh>
 
 #include <nix/value-to-json.hh>
 
@@ -167,19 +169,31 @@ static void worker(
         auto s = readLine(from.get());
         if (s == "exit") break;
         if (!hasPrefix(s, "do ")) abort();
-        std::string attrPath(s, 3);
+        std::string attrName(s, 3);
 
-        debug("worker process %d at '%s'", getpid(), attrPath);
+        debug("worker process %d at '%s'", getpid(), attrName);
 
         /* Evaluate it and send info back to the master. */
         nlohmann::json reply;
-        reply["attr"] = attrPath;
+        reply["attr"] = attrName;
 
         try {
-            auto vTmp = findAlongAttrPath(state, attrPath, autoArgs, *vRoot).first;
-
             auto v = state.allocValue();
-            state.autoCallFunction(autoArgs, *vTmp, *v);
+
+            state.autoCallFunction(autoArgs, *vRoot, *v);
+
+            if (v->type != tAttrs)
+                throw TypeError("root is of type '%s', expected a set", showType(*v));
+
+            if (attrName.empty())
+                throw Error("empty attribute name");
+
+            Bindings::iterator a = v->attrs->find(state.symbols.create(attrName));
+
+            if (a == v->attrs->end())
+                throw Error("attribute '%s' not found", attrName);
+
+            v = &*a->value;
 
             if (auto drv = getDerivation(state, *v, false)) {
 
@@ -229,7 +243,7 @@ static void worker(
 
             }
 
-            else if (v->type() == nAttrs)
+            else if (v->type == nAttrs)
               {
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
@@ -239,10 +253,10 @@ static void worker(
                 reply["attrs"] = std::move(attrs);
             }
 
-            else if (v->type() == nNull)
+            else if (v->type == nNull)
                 ;
 
-            else throw TypeError("attribute '%s' is %s, which is not supported", attrPath, showType(*v));
+            else throw TypeError("attribute '%s' is %s, which is not supported", attrName, showType(*v));
 
         } catch (EvalError & e) {
             auto err = e.info();
