@@ -1,6 +1,7 @@
 #include <map>
 #include <iostream>
 #include <thread>
+#include <sstream>
 
 #include <nix/config.h>
 #include <nix/shared.hh>
@@ -234,7 +235,9 @@ static void worker(
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
                 for (auto & i : v->attrs->lexicographicOrder()) {
-                    attrs.push_back(i->name);
+                    std::ostringstream s;
+                    s << "\"" << i->name << "\"";
+                    attrs.push_back(s.str());
                 }
                 reply["attrs"] = std::move(attrs);
             }
