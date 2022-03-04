@@ -134,7 +134,6 @@ static void worker(
 
                 auto drvPath = drv->queryDrvPath();
                 auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
-                auto storePath = localStore->parseStorePath(drvPath);
                 auto outputs = drv->queryOutputs(false);
 
                 reply["name"] = drv->queryName();
@@ -146,7 +145,7 @@ static void worker(
 
             }
 
-            else if (v->type == nAttrs)
+            else if (v->type == tAttrs)
               {
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
@@ -156,17 +155,13 @@ static void worker(
                 reply["attrs"] = std::move(attrs);
             }
 
-            else if (v->type == nNull)
+            else if (v->type == tNull)
                 ;
 
             else throw TypeError("attribute '%s' is %s, which is not supported", attrName, showType(*v));
 
         } catch (EvalError & e) {
-            auto err = e.info();
-
-            std::ostringstream oss;
-            showErrorInfo(oss, err, loggerSettings.showTrace.get());
-            auto msg = oss.str();
+            auto msg = e.msg();
 
             // Transmits the error we got from the previous evaluation
             // in the JSON output.
@@ -210,7 +205,7 @@ int main(int argc, char * * argv)
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
         if (myArgs.showTrace) {
-            loggerSettings.showTrace.assign(true);
+            settings.showTrace.assign(true);
         }
 
         struct State
