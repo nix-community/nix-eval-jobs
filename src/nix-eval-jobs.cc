@@ -81,18 +81,25 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
 
 static MyArgs myArgs;
 
+static Value* releaseExprTopLevelValue(EvalState & state, Bindings & autoArgs) {
+    Value vTop;
+
+    state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
+
+    auto vRoot = state.allocValue();
+
+    state.autoCallFunction(autoArgs, vTop, *vRoot);
+
+    return vRoot;
+}
+
 static void worker(
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
     AutoCloseFD & from)
 {
-    Value vTop;
-
-    state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
-
-    auto vRoot = state.allocValue();
-    state.autoCallFunction(autoArgs, vTop, *vRoot);
+    auto vRoot = releaseExprTopLevelValue(state, autoArgs);
 
     while (true) {
         /* Wait for the master to send us a job name. */
