@@ -15,9 +15,7 @@
 #include <nix/derivations.hh>
 #include <nix/local-store.hh>
 #include <nix/logging.hh>
-#include <nix/types.hh>
-#include <nix/symbol-table.hh>
-#include <nix/value.hh>
+#include <nix/error.hh>
 
 #include <nix/value-to-json.hh>
 
@@ -121,7 +119,7 @@ static void worker(
 
             state.autoCallFunction(autoArgs, *vRoot, *v);
 
-            if (v->type != tAttrs)
+            if (v->type() != nAttrs)
                 throw TypeError("root is of type '%s', expected a set", showType(*v));
 
             if (attrName.empty())
@@ -141,6 +139,7 @@ static void worker(
 
                 auto drvPath = drv->queryDrvPath();
                 auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
+                auto storePath = localStore->parseStorePath(drvPath);
                 auto outputs = drv->queryOutputs(false);
 
                 reply["name"] = drv->queryName();
@@ -152,7 +151,7 @@ static void worker(
 
             }
 
-            else if (v->type == tAttrs)
+            else if (v->type() == nAttrs)
               {
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
@@ -162,13 +161,17 @@ static void worker(
                 reply["attrs"] = std::move(attrs);
             }
 
-            else if (v->type == tNull)
+            else if (v->type() == nNull)
                 ;
 
             else throw TypeError("attribute '%s' is %s, which is not supported", attrName, showType(*v));
 
         } catch (EvalError & e) {
-            auto msg = e.msg();
+            auto err = e.info();
+
+            std::ostringstream oss;
+            showErrorInfo(oss, err, loggerSettings.showTrace.get());
+            auto msg = oss.str();
 
             // Transmits the error we got from the previous evaluation
             // in the JSON output.
@@ -212,7 +215,7 @@ int main(int argc, char * * argv)
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
         if (myArgs.showTrace) {
-            settings.showTrace.assign(true);
+            loggerSettings.showTrace.assign(true);
         }
 
         struct State
@@ -336,7 +339,7 @@ int main(int argc, char * * argv)
 
         auto topLevelValue = releaseExprTopLevelValue(initialState, autoArgs);
 
-        if (topLevelValue->type == tAttrs) {
+        if (topLevelValue->type() == nAttrs) {
           auto state(state_.lock());
           for (auto & a : topLevelValue->attrs->lexicographicOrder()) {
             state->todo.insert(a->name);
