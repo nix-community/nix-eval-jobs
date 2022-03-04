@@ -32,7 +32,6 @@ using namespace nix;
 struct MyArgs : MixEvalArgs, MixCommonArgs
 {
     Path releaseExpr;
-    bool showTrace = false;
     size_t nrWorkers = 1;
     size_t maxMemorySize = 4096;
 
@@ -66,13 +65,6 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
           .labels({"size"})
           .handler({[=](std::string s) {
             maxMemorySize = std::stoi(s);
-          }});
-
-        mkFlag()
-          .longName("show-trace")
-          .description("print out a stack trace in case of evaluation errors")
-          .handler({[=](std::string s){
-            showTrace = "true" == s;
           }});
 
         expectArg("expr", &releaseExpr);
@@ -211,9 +203,7 @@ int main(int argc, char * * argv)
 
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
-        if (myArgs.showTrace) {
-            settings.showTrace.assign(true);
-        }
+        settings.showTrace.assign(true);
 
         struct State
         {
