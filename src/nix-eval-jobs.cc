@@ -3,6 +3,7 @@
 #include <thread>
 
 #include <nix/config.h>
+#include <nix/args.hh>
 #include <nix/shared.hh>
 #include <nix/store-api.hh>
 #include <nix/eval.hh>
