@@ -198,20 +198,35 @@ static void worker(
             if (v->type() != nAttrs)
                 throw TypeError("root is of type '%s', expected a set", showType(*v));
 
-            if (attrName.empty())
-                throw Error("empty attribute name");
+            if (attrName.empty()) throw Error("empty attribute name");
 
-            Bindings::iterator a = v->attrs->find(state.symbols.create(attrName));
+            auto a = v->attrs->get(state.symbols.create(attrName));
 
-            if (a == v->attrs->end())
-                throw Error("attribute '%s' not found", attrName);
+            if (!a) throw Error("attribute '%s' not found", attrName);
 
-            v = &*a->value;
+            if (auto drv = getDerivation(state, *a->value, false)) {
 
-            if (auto drv = getDerivation(state, *v, false)) {
+                // Workaround for nixos "systems"
+                //
+                //  ... which have "system" attributes that are
+                // themselves derivations.
+                std::string system;
 
-                if (drv->querySystem() == "unknown")
+                auto systemAttr = a->value->attrs->get(state.symbols.create("system"));
+
+                if (!systemAttr) {
                     throw EvalError("derivation must have a 'system' attribute");
+
+                } else if (auto systemDrv = getDerivation(state, *systemAttr->value, false)) {
+                    system = systemDrv->querySystem();
+
+                } else {
+                    system = drv->querySystem();
+
+                }
+
+                if (system == "unknown")
+                    throw EvalError("derivation must not have unknown system type");
 
                 auto drvPath = drv->queryDrvPath();
                 auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
@@ -219,7 +234,7 @@ static void worker(
                 auto outputs = drv->queryOutputs(false);
 
                 reply["name"] = drv->queryName();
-                reply["system"] = drv->querySystem();
+                reply["system"] = move(system);
                 reply["drvPath"] = drvPath;
                 for (auto out : outputs){
                     reply["outputs"][out.first] = out.second;
