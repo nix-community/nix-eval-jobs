@@ -156,7 +156,7 @@ static void worker(
         callFlake(state, lockedFlake, *vFlake);
 
         auto vOutputs = vFlake->attrs->get(state.symbols.create("outputs"))->value;
-        state.forceValue(*vOutputs);
+        state.forceValue(*vOutputs, noPos);
         vTop = *vOutputs;
 
         if (fragment.length() > 0) {
