@@ -234,7 +234,7 @@ static void worker(
                 auto outputs = drv->queryOutputs(false);
 
                 reply["name"] = drv->queryName();
-                reply["system"] = move(system);
+                reply["system"] = system;
                 reply["drvPath"] = drvPath;
                 for (auto out : outputs){
                     reply["outputs"][out.first] = out.second;
