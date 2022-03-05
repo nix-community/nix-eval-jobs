@@ -8,7 +8,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        drvArgs = { srcDir = self; };
+        drvArgs = { srcDir = self; nix = pkgs.nixUnstable; };
       in
       rec {
         packages.nix-eval-jobs = pkgs.callPackage ./default.nix drvArgs;
