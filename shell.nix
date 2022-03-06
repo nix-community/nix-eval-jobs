@@ -15,7 +15,7 @@
 
 (pkgs.callPackage ./default.nix {
   inherit srcDir;
-  nix = pkgs.nixUnstable;
+  nix = pkgs.nix;
 }).overrideAttrs (old: {
 
   src = null;
