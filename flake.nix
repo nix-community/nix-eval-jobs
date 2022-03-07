@@ -1,14 +1,14 @@
 {
   description = "Hydra's builtin hydra-eval-jobs as a standalone";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-21.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        drvArgs = { srcDir = self; nix = pkgs.nix; };
+        drvArgs = { srcDir = self; nix = pkgs.nixUnstable; };
       in
       rec {
         packages.nix-eval-jobs = pkgs.callPackage ./default.nix drvArgs;
