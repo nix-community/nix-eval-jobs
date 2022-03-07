@@ -3,6 +3,7 @@
 #include <thread>
 
 #include <nix/config.h>
+#include <nix/args.hh>
 #include <nix/shared.hh>
 #include <nix/store-api.hh>
 #include <nix/eval.hh>
@@ -11,13 +12,10 @@
 #include <nix/get-drvs.hh>
 #include <nix/globals.hh>
 #include <nix/common-eval-args.hh>
-#include <nix/flake/flakeref.hh>
-#include <nix/flake/flake.hh>
 #include <nix/attr-path.hh>
 #include <nix/derivations.hh>
-#include <nix/local-fs-store.hh>
+#include <nix/local-store.hh>
 #include <nix/logging.hh>
-#include <nix/error.hh>
 
 #include <nix/value-to-json.hh>
 
@@ -34,7 +32,6 @@ typedef enum { evalAuto, evalImpure, evalPure } pureEval;
 struct MyArgs : MixEvalArgs, MixCommonArgs
 {
     Path releaseExpr;
-    Path gcRootsDir;
     bool flake = false;
     bool meta = false;
     bool showTrace = false;
@@ -44,10 +41,10 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
 
     MyArgs() : MixCommonArgs("nix-eval-jobs")
     {
-        addFlag({
-            .longName = "help",
-            .description = "show usage information",
-            .handler = {[&]() {
+        mkFlag()
+            .longName("help")
+            .description("show usage information")
+            .handler({[&]() {
                 printf("USAGE: nix-eval-jobs [options] expr\n\n");
                 for (const auto & [name, flag] : longFlags) {
                     if (hiddenCategories.count(flag->category)) {
@@ -56,59 +53,44 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
                     printf("  --%-20s %s\n", name.c_str(), flag->description.c_str());
                 }
                 ::exit(0);
-            }},
-        });
+            }});
 
-        addFlag({
-            .longName = "impure",
-            .description = "set evaluation mode",
-            .handler = {[&]() {
+        mkFlag()
+            .longName("impure")
+            .description("set evaluation mode")
+            .handler({[&]() {
                 evalMode = evalImpure;
-            }},
-        });
+            }});
 
-        addFlag({
-            .longName = "gc-roots-dir",
-            .description = "garbage collector roots directory",
-            .labels = {"path"},
-            .handler = {&gcRootsDir}
-        });
-
-        addFlag({
-            .longName = "workers",
-            .description = "number of evaluate workers",
-            .labels = {"workers"},
-            .handler = {[=](std::string s) {
+        mkFlag()
+            .longName("workers")
+            .description("number of evaluate workers")
+            .labels({"workers"})
+            .handler({[=](std::string s) {
                 nrWorkers = std::stoi(s);
-            }}
-        });
+            }});
 
-        addFlag({
-            .longName = "max-memory-size",
-            .description = "maximum evaluation memory size",
-            .labels = {"size"},
-            .handler = {[=](std::string s) {
+        mkFlag()
+            .longName("max-memory-size")
+            .description("maximum evaluation memory size")
+            .labels({"size"})
+            .handler({[=](std::string s) {
                 maxMemorySize = std::stoi(s);
-            }}
-        });
+            }});
 
-        addFlag({
-            .longName = "flake",
-            .description = "build a flake",
-            .handler = {&flake, true}
-        });
+        mkFlag()
+            .longName("meta")
+            .description("include derivation meta field in output")
+            .handler({[=](){
+                meta = true;
+            }});
 
-        addFlag({
-            .longName = "meta",
-            .description = "include derivation meta field in output",
-            .handler = {&meta, true}
-        });
-
-        addFlag({
-            .longName = "show-trace",
-            .description = "print out a stack trace in case of evaluation errors",
-            .handler = {&showTrace, true}
-        });
+        mkFlag()
+            .longName("show-trace")
+            .description("print out a stack trace in case of evaluation errors")
+            .handler({[=]() {
+                showTrace = true;
+            }});
 
         expectArg("expr", &releaseExpr);
     }
@@ -116,49 +98,25 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
 
 static MyArgs myArgs;
 
+static Value* releaseExprTopLevelValue(EvalState & state, Bindings & autoArgs) {
+    Value vTop;
+
+    state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
+
+    auto vRoot = state.allocValue();
+
+    state.autoCallFunction(autoArgs, vTop, *vRoot);
+
+    return vRoot;
+}
+
 static void worker(
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
-    AutoCloseFD & from,
-    const Path &gcRootsDir)
+    AutoCloseFD & from)
 {
-    Value vTop;
-
-    if (myArgs.flake) {
-        using namespace flake;
-
-        auto [flakeRef, fragment] = parseFlakeRefWithFragment(myArgs.releaseExpr, absPath("."));
-
-        auto vFlake = state.allocValue();
-
-        auto lockedFlake = lockFlake(state, flakeRef,
-            LockFlags {
-                .updateLockFile = false,
-                .useRegistries = false,
-                .allowMutable = false,
-            });
-
-        callFlake(state, lockedFlake, *vFlake);
-
-        auto vOutputs = vFlake->attrs->get(state.symbols.create("outputs"))->value;
-        state.forceValue(*vOutputs);
-        vTop = *vOutputs;
-
-        if (fragment.length() > 0) {
-            Bindings & bindings(*state.allocBindings(0));
-            auto [nTop, pos] = findAlongAttrPath(state, fragment, bindings, vTop);
-            if (!nTop)
-                throw Error("error: attribute '%s' missing", nTop);
-            vTop = *nTop;
-        }
-
-    } else {
-        state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
-    }
-
-    auto vRoot = state.allocValue();
-    state.autoCallFunction(autoArgs, vTop, *vRoot);
+    auto vRoot = releaseExprTopLevelValue(state, autoArgs);
 
     while (true) {
         /* Wait for the master to send us a job name. */
@@ -167,32 +125,57 @@ static void worker(
         auto s = readLine(from.get());
         if (s == "exit") break;
         if (!hasPrefix(s, "do ")) abort();
-        std::string attrPath(s, 3);
+        std::string attrName(s, 3);
 
-        debug("worker process %d at '%s'", getpid(), attrPath);
+        debug("worker process %d at '%s'", getpid(), attrName);
 
         /* Evaluate it and send info back to the master. */
         nlohmann::json reply;
-        reply["attr"] = attrPath;
+        reply["attr"] = attrName;
 
         try {
-            auto vTmp = findAlongAttrPath(state, attrPath, autoArgs, *vRoot).first;
-
             auto v = state.allocValue();
-            state.autoCallFunction(autoArgs, *vTmp, *v);
 
-            if (auto drv = getDerivation(state, *v, false)) {
+            state.autoCallFunction(autoArgs, *vRoot, *v);
 
-                if (drv->querySystem() == "unknown")
+            if (v->type != tAttrs)
+                throw TypeError("root is of type '%s', expected a set", showType(*v));
+
+            if (attrName.empty()) throw Error("empty attribute name");
+
+            auto a = v->attrs->find(state.symbols.create(attrName));
+
+            if (a == v->attrs->end()) throw Error("attribute '%s' not found", attrName);
+
+            if (auto drv = getDerivation(state, *a->value, false)) {
+
+                // Workaround for nixos "systems"
+                //
+                //  ... which have "system" attributes that are
+                // themselves derivations.
+                std::string system;
+
+                auto systemAttr = a->value->attrs->find(state.symbols.create("system"));
+
+                if (systemAttr == a->value->attrs->end()) {
                     throw EvalError("derivation must have a 'system' attribute");
 
+                } else if (auto systemDrv = getDerivation(state, *systemAttr->value, false)) {
+                    system = systemDrv->querySystem();
+
+                } else {
+                    system = drv->querySystem();
+
+                }
+
+                if (system == "unknown")
+                    throw EvalError("derivation must not have unknown system type");
+
                 auto drvPath = drv->queryDrvPath();
-                auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
-                auto storePath = localStore->parseStorePath(drvPath);
                 auto outputs = drv->queryOutputs(false);
 
                 reply["name"] = drv->queryName();
-                reply["system"] = drv->querySystem();
+                reply["system"] = system;
                 reply["drvPath"] = drvPath;
                 for (auto out : outputs){
                     reply["outputs"][out.first] = out.second;
@@ -211,54 +194,34 @@ static void worker(
                         continue;
                       }
 
-                      printValueAsJSON(state, true, *metaValue, noPos, ss, context);
+                      printValueAsJSON(state, true, *metaValue, ss, context);
                       nlohmann::json field = nlohmann::json::parse(ss.str());
                       meta[name] = field;
                     }
                     reply["meta"] = meta;
                 }
 
-                /* Register the derivation as a GC root.  !!! This
-                   registers roots for jobs that we may have already
-                   done. */
-                if (gcRootsDir != "") {
-                    Path root = gcRootsDir + "/" + std::string(baseNameOf(drvPath));
-                    if (!pathExists(root))
-                        localStore->addPermRoot(storePath, root);
-                }
-
             }
 
-            else if (v->type() == nAttrs)
+            else if (v->type == tAttrs)
               {
                 auto attrs = nlohmann::json::array();
                 StringSet ss;
                 for (auto & i : v->attrs->lexicographicOrder()) {
-                    std::string name(i->name);
-                    if (name.find('.') != std::string::npos || name.find(' ') != std::string::npos) {
-                        printError("skipping job with illegal name '%s'", name);
-                        continue;
-                    }
-                    attrs.push_back(name);
+                    attrs.push_back(i->name);
                 }
                 reply["attrs"] = std::move(attrs);
             }
 
-            else if (v->type() == nNull)
+            else if (v->type == tNull)
                 ;
 
-            else throw TypeError("attribute '%s' is %s, which is not supported", attrPath, showType(*v));
+            else throw TypeError("attribute '%s' is %s, which is not supported", attrName, showType(*v));
 
         } catch (EvalError & e) {
-            auto err = e.info();
-
-            std::ostringstream oss;
-            showErrorInfo(oss, err, loggerSettings.showTrace.get());
-            auto msg = oss.str();
-
             // Transmits the error we got from the previous evaluation
             // in the JSON output.
-            reply["error"] = filterANSIEscapes(msg, true);
+            reply["error"] = filterANSIEscapes(e.msg(), true);
             // Don't forget to print it into the STDERR log, this is
             // what's shown in the Hydra UI.
             printError(e.msg());
@@ -301,15 +264,13 @@ int main(int argc, char * * argv)
 
         if (myArgs.releaseExpr == "") throw UsageError("no expression specified");
 
-        if (myArgs.gcRootsDir == "") printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
-
         if (myArgs.showTrace) {
-            loggerSettings.showTrace.assign(true);
+            settings.showTrace.assign(true);
         }
 
         struct State
         {
-            std::set<std::string> todo{""};
+            std::set<std::string> todo{};
             std::set<std::string> active;
             std::exception_ptr exc;
         };
@@ -341,7 +302,7 @@ int main(int argc, char * * argv)
                                 try {
                                     EvalState state(myArgs.searchPath, openStore());
                                     Bindings & autoArgs = *myArgs.getAutoArgs(state);
-                                    worker(state, autoArgs, *to, *from, myArgs.gcRootsDir);
+                                    worker(state, autoArgs, *to, *from);
                                 } catch (Error & e) {
                                     nlohmann::json err;
                                     auto msg = e.msg();
@@ -422,6 +383,18 @@ int main(int argc, char * * argv)
                 wakeup.notify_all();
             }
         };
+
+        EvalState initialState(myArgs.searchPath, openStore());
+        Bindings & autoArgs = *myArgs.getAutoArgs(initialState);
+
+        auto topLevelValue = releaseExprTopLevelValue(initialState, autoArgs);
+
+        if (topLevelValue->type == tAttrs) {
+          auto state(state_.lock());
+          for (auto & a : topLevelValue->attrs->lexicographicOrder()) {
+            state->todo.insert(a->name);
+          }
+        }
 
         std::vector<std::thread> threads;
         for (size_t i = 0; i < myArgs.nrWorkers; i++)
