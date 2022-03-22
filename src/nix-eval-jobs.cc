@@ -40,6 +40,7 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
     bool showTrace = false;
     size_t nrWorkers = 1;
     size_t maxMemorySize = 4096;
+    size_t depth = 1;
     pureEval evalMode = evalAuto;
 
     MyArgs() : MixCommonArgs("nix-eval-jobs")
@@ -57,6 +58,15 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
                 }
                 ::exit(0);
             }},
+        });
+
+        addFlag({
+            .longName = "depth",
+            .description = "maximum evaluation depth",
+            .labels = {"depth"},
+            .handler = {[=](std::string s) {
+                depth = std::stoi(s);
+            }}
         });
 
         addFlag({
@@ -231,17 +241,24 @@ static void worker(
 
             else if (v->type() == nAttrs)
               {
-                auto attrs = nlohmann::json::array();
-                StringSet ss;
-                for (auto & i : v->attrs->lexicographicOrder()) {
-                    std::string name(i->name);
-                    if (name.find('.') != std::string::npos || name.find(' ') != std::string::npos) {
-                        printError("skipping job with illegal name '%s'", name);
-                        continue;
+                // Hacky way to get depth.... fails with embedded "."
+                size_t n = std::count(attrPath.begin(), attrPath.end(), '.')+(attrPath == "" ? 0: 1);
+                if (n < myArgs.depth){
+                    auto attrs = nlohmann::json::array();
+                    Bindings::iterator j = v->attrs->find(state.sRecurseForDerivations);
+                    if ( n==0 || (j != v->attrs->end() && state.forceBool(*j->value, *j->pos))){
+                        StringSet ss;
+                        for (auto & i : v->attrs->lexicographicOrder()) {
+                            std::string name(i->name);
+                            if (name.find('.') != std::string::npos || name.find(' ') != std::string::npos) {
+                                name= "\"" + name + "\"";
+                            }
+                            attrs.push_back(name);
+                        }
                     }
-                    attrs.push_back(name);
+                    reply["attrs"] = std::move(attrs);
                 }
-                reply["attrs"] = std::move(attrs);
+
             }
 
             else if (v->type() == nNull)
