@@ -365,13 +365,13 @@ int main(int argc, char * * argv)
         auto handler = [&]()
         {
             try {
-                pid_t pid = -1;
+                std::optional<Pid> pid;
                 AutoCloseFD from, to;
 
                 while (true) {
 
                     /* Start a new worker process if necessary. */
-                    if (pid == -1) {
+                    if (!pid.has_value()) {
                         Pipe toPipe, fromPipe;
                         toPipe.create();
                         fromPipe.create();
@@ -381,6 +381,7 @@ int main(int argc, char * * argv)
                              from{std::make_shared<AutoCloseFD>(std::move(toPipe.readSide))}
                             ]()
                             {
+                                debug("created worker process %d", getpid());
                                 try {
                                     EvalState state(myArgs.searchPath, openStore());
                                     Bindings & autoArgs = *myArgs.getAutoArgs(state);
@@ -399,13 +400,12 @@ int main(int argc, char * * argv)
                             ProcessOptions { .allowVfork = false });
                         from = std::move(fromPipe.readSide);
                         to = std::move(toPipe.writeSide);
-                        debug("created worker process %d", pid);
                     }
 
                     /* Check whether the existing worker process is still there. */
                     auto s = readLine(from.get());
                     if (s == "restart") {
-                        pid = -1;
+                        pid = std::nullopt;
                         continue;
                     } else if (s != "next") {
                         auto json = nlohmann::json::parse(s);
@@ -452,16 +452,71 @@ int main(int argc, char * * argv)
             }
         };
 
-        EvalState initialState(myArgs.searchPath, openStore());
-        Bindings & autoArgs = *myArgs.getAutoArgs(initialState);
+        /* Collect initial attributes to evaluate. This must be done
+           in a separate fork to avoid spawning a download in the
+           parent process. If that happens, worker processes will try
+           to enqueue downloads on their own download threads (which
+           will not exist). */
+        {
+            AutoCloseFD from, to;
+            Pipe toPipe, fromPipe;
+            toPipe.create();
+            fromPipe.create();
+            Pid p = startProcess(
+                [&,
+                 to{std::make_shared<AutoCloseFD>(std::move(fromPipe.writeSide))},
+                 from{std::make_shared<AutoCloseFD>(std::move(toPipe.readSide))}
+                ]()
+                {
+                    debug("created initial attribute collection process %d", getpid());
 
-        auto topLevelValue = releaseExprTopLevelValue(initialState, autoArgs);
+                    nlohmann::json reply;
 
-        if (topLevelValue->type() == nAttrs) {
-          auto state(state_.lock());
-          for (auto & a : topLevelValue->attrs->lexicographicOrder()) {
-            state->todo.insert(a->name);
-          }
+                    try {
+                        EvalState state(myArgs.searchPath, openStore());
+                        Bindings & autoArgs = *myArgs.getAutoArgs(state);
+
+                        auto vRoot = releaseExprTopLevelValue(state, autoArgs);
+
+                        if (vRoot->type() != nAttrs) {
+                            std::stringstream ss;
+                            ss << "top level value is '" << showType(*vRoot) << "', expected an attribute set";
+
+                            reply["error"] = ss.str();
+                        } else {
+                            std::vector<std::string> attrs;
+                            for (auto & a : vRoot->attrs->lexicographicOrder())
+                                attrs.push_back(a->name);
+
+                            reply["attrs"] = attrs;
+                        }
+                    } catch (Error & e) {
+                        auto msg = e.msg();
+                        reply["error"] = filterANSIEscapes(msg, true);
+                        printError(msg);
+                    }
+
+                    writeLine(to->get(), reply.dump());
+                },
+                ProcessOptions { .allowVfork = false });
+            from = std::move(fromPipe.readSide);
+            to = std::move(toPipe.writeSide);
+
+            auto s = readLine(from.get());
+            auto json = nlohmann::json::parse(s);
+
+            if (json.find("error") != json.end()) {
+                throw Error("getting initial attributes: %s", (std::string) json["error"]);
+
+            } else if (json.find("attrs") != json.end()) {
+                auto state(state_.lock());
+                for (std::string a : json["attrs"])
+                    state->todo.insert(a);
+
+            } else {
+                throw Error("expected object with \"error\" or \"attrs\", got: %s", s);
+
+            }
         }
 
         std::vector<std::thread> threads;
