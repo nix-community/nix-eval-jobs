@@ -391,17 +391,23 @@ static void worker(
         auto s = readLine(from.get());
         if (s == "exit") break;
         if (!hasPrefix(s, "do ")) abort();
-        std::string attrPath(s, 3);
+        auto accessorStr = std::string(s, 3);
 
-        debug("worker process %d at '%s'", getpid(), attrPath);
+        debug("worker process %d at '%s'", getpid(), accessorStr);
+
+        std::unique_ptr<Accessor> accessor;
+        try {
+            accessor = accessorFromJson(nlohmann::json::parse(accessorStr));
+        } catch (nlohmann::json::exception & e) {
+            throw EvalError("parsing accessor json from %s: %s", accessorStr, e.what());
+        }
 
         /* Evaluate it and send info back to the collector. */
-        nlohmann::json reply = nlohmann::json{ { "attr", attrPath } };
+        nlohmann::json reply = nlohmann::json{ { accessor->key(), accessor->toJson() } };
         try {
-            auto vTmp = findAlongAttrPath(state, attrPath, autoArgs, *vRoot).first;
-
+            auto res = accessor->getIn(state, autoArgs, *vRoot);
             auto v = state.allocValue();
-            state.autoCallFunction(autoArgs, *vTmp, *v);
+            state.autoCallFunction(autoArgs, *res, *v);
 
             if (auto drvInfo = getDerivation(state, *v, false)) {
 
@@ -422,25 +428,7 @@ static void worker(
 
             }
 
-            else if (v->type() == nAttrs)
-              {
-                auto attrs = nlohmann::json::array();
-                StringSet ss;
-                for (auto & i : v->attrs->lexicographicOrder()) {
-                    std::string name(i->name);
-                    if (name.find('.') != std::string::npos || name.find(' ') != std::string::npos) {
-                        printError("skipping job with illegal name '%s'", name);
-                        continue;
-                    }
-                    attrs.push_back(name);
-                }
-                reply["attrs"] = std::move(attrs);
-            }
-
-            else if (v->type() == nNull)
-                ;
-
-            else throw TypeError("attribute '%s' is %s, which is not supported", attrPath, showType(*v));
+            else throw TypeError("element at '%s' is not a derivation", accessor->toJson().dump());
 
         } catch (EvalError & e) {
             auto err = e.info();
@@ -515,8 +503,8 @@ struct Proc {
 
 struct State
 {
-    std::set<std::string> todo{""};
-    std::set<std::string> active;
+    std::set<nlohmann::json> todo{};
+    std::set<nlohmann::json> active;
     std::exception_ptr exc;
 };
 
@@ -542,7 +530,7 @@ std::function<void()> collector(Sync<State> & state_, std::condition_variable & 
                 }
 
                 /* Wait for a job name to become available. */
-                std::string attrPath;
+                nlohmann::json accessor;
 
                 while (true) {
                     checkInterrupt();
@@ -552,41 +540,28 @@ std::function<void()> collector(Sync<State> & state_, std::condition_variable & 
                         return;
                     }
                     if (!state->todo.empty()) {
-                        attrPath = *state->todo.begin();
+                        accessor = *state->todo.begin();
                         state->todo.erase(state->todo.begin());
-                        state->active.insert(attrPath);
+                        state->active.insert(accessor);
                         break;
                     } else
                         state.wait(wakeup);
                 }
 
                 /* Tell the worker to evaluate it. */
-                writeLine(proc->to.get(), "do " + attrPath);
+                writeLine(proc->to.get(), "do " + accessor.dump());
 
                 /* Wait for the response. */
                 auto respString = readLine(proc->from.get());
                 auto response = nlohmann::json::parse(respString);
 
-                /* Handle the response. */
-                StringSet newAttrs;
-                if (response.find("attrs") != response.end()) {
-                    for (auto & i : response["attrs"]) {
-                        auto s = (attrPath.empty() ? "" : attrPath + ".") + (std::string) i;
-                        newAttrs.insert(s);
-                    }
-                } else {
-                    auto state(state_.lock());
-                    std::cout << respString << "\n" << std::flush;
-                }
-
                 proc_ = std::move(proc);
 
-                /* Add newly discovered job names to the queue. */
+                /* Print the response. */
                 {
                     auto state(state_.lock());
-                    state->active.erase(attrPath);
-                    for (auto & s : newAttrs)
-                        state->todo.insert(s);
+                    std::cout << response << "\n" << std::flush;
+                    state->active.erase(accessor);
                     wakeup.notify_all();
                 }
             }
