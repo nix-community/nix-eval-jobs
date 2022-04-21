@@ -64,7 +64,8 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
             .longName = "help",
             .description = "show usage information",
             .handler = {[&]() {
-                printf("USAGE: nix-eval-jobs [options] expr\n\n");
+                printf("USAGE: nix-eval-jobs [options] filepath\n\n");
+                printf("  <filepath> should evaluate to one of: a derivation, or a list or set of derivations.\n\n");
                 for (const auto & [name, flag] : longFlags) {
                     if (hiddenCategories.count(flag->category)) {
                         continue;

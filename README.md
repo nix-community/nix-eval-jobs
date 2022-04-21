@@ -44,7 +44,9 @@ The code is derived from [hydra's](https://github.com/nixos/hydra) eval-jobs exe
 
 ``` console
 $ nix-eval-jobs --help
-USAGE: nix-eval-jobs [options] expr
+USAGE: nix-eval-jobs [options] filepath
+
+  <filepath> should evaluate to one of: a derivation, or a list or set of derivations.
 
   --arg                  Pass the value *expr* as the argument *name* to Nix functions.
   --argstr               Pass the string *string* as the argument *name* to Nix functions.
