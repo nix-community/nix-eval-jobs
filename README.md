@@ -3,7 +3,7 @@
 This project evaluates nix attributes sets in parallel with streamable json
 output.  This is useful for time and memory intensive evaluations such as NixOS
 machines, i.e. in a CI context.  The evaluation is done with a controllable
-number of threads that are restarted when their memory consumption exceeds a
+number of forks that are restarted when their memory consumption exceeds a
 certain threshold.
 
 To facilitate integration, nix-eval-jobs creates garbage collection roots for
@@ -13,8 +13,7 @@ service and user-started nix builds processes.
 
 ## Why using nix-eval-jobs?
 
-- Faster evaluation by using threads
-- Memory used for evaluation is reclaimed after nix-eval-jobs finish, so that the build can use it.
+- Memory used for evaluation is reclaimed after forked workers finish, so that the build can use it.
 - Evaluation of jobs can fail individually
 
 ## Example
