@@ -29,6 +29,19 @@
 
 using namespace nix;
 
+/* `nix-eval-jobs` is meant as an alternative to
+   `nix-instantiate`. `nix-instantiate` can use a *lot* of memory
+   which is unacceptable in settings where multiple instantiations may
+   be happening at the same time. As an example, `nix-eval-jobs` is a
+   great program for use in continuous integration (CI). It was
+   actually originally extracted from the `hydra` nix CI program.
+
+   `nix-eval-jobs` trades throughput of evaluation for memory by
+   forking processes and killing them if they go above a specified
+   threshold. This way, the operating system is taking the role of
+   garbage collector by simply freeing the whole heap when required.
+ */
+
 typedef enum { evalAuto, evalImpure, evalPure } pureEval;
 
 // Safe to ignore - the args will be static.
