@@ -598,6 +598,41 @@ std::function<void()> collector(Sync<State> & state_, std::condition_variable & 
     };
 }
 
+void initState(Sync<State> & state_) {
+    /* Collect initial attributes to evaluate. This must be done in a
+       separate fork to avoid spawning a download in the parent
+       process. If that happens, worker processes will try to enqueue
+       downloads on their own download threads (which will not
+       exist). Then the worker processes will hang forever waiting for
+       downloads.
+    */
+    auto proc = Proc(accessorCollector);
+
+    auto s = readLine(proc.from.get());
+    auto json = nlohmann::json::parse(s);
+
+    if (json.find("error") != json.end()) {
+        throw Error("getting initial attributes: %s", (std::string) json["error"]);
+
+    } else if (json.find("attrs") != json.end()) {
+        auto state(state_.lock());
+        for (auto a : json["attrs"])
+            state->todo.insert(a);
+
+    } else if (json.find("indices") != json.end()){
+        auto state(state_.lock());
+        for (auto i : json["indices"])
+            state->todo.insert(i);
+
+    } else if (json.find("drvPath") != json.end()) {
+        std::cout << json.dump() << "\n" << std::flush;
+
+    } else {
+        throw Error("expected object with \"error\", \"indices\", \"attrs\", or a derivation, got: %s", s);
+
+    }
+}
+
 int main(int argc, char * * argv)
 {
     /* Prevent undeclared dependencies in the evaluation via
@@ -633,6 +668,7 @@ int main(int argc, char * * argv)
         }
 
         Sync<State> state_;
+        initState(state_);
 
         /* Start a collector thread per worker process. */
         std::vector<std::thread> threads;
