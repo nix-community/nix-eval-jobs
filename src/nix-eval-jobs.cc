@@ -232,6 +232,150 @@ static void to_json(nlohmann::json & json, const Drv & drv) {
 
 }
 
+/* Ways to look into the top-level value */
+class Accessor {
+public:
+    virtual Value * getIn(EvalState & state, Bindings & autoArgs, Value & v) = 0;
+
+    virtual std::string key() = 0;
+
+    virtual nlohmann::json toJson() = 0;
+
+    virtual ~Accessor() {}
+};
+
+/* An index into a list */
+struct Index : Accessor {
+    unsigned long val;
+
+    Index(const nlohmann::json & json) {
+        try {
+            val = json;
+        } catch (...)  {
+            throw TypeError("could not make an index out of json: %s", json.dump());
+        }
+    }
+
+    Value * getIn(EvalState & state, Bindings & autoArgs, Value & v) {
+        unsigned long i = val;
+
+        if (v.type() != nList)
+            throw TypeError("tried to get an index in %s", showType(v));
+
+        for (auto el : v.listItems()) {
+            if (i == 0) {
+                auto x = state.allocValue();
+                state.autoCallFunction(autoArgs, *el, *x);
+                return x;
+            }
+            else --i;
+        }
+
+        throw EvalError("index %d out of bounds", val);
+    }
+
+    std::string key() {
+        return "index";
+    }
+
+    nlohmann::json toJson() {
+        return val;
+    }
+};
+
+/* An attribute name in an attrset */
+struct Name : Accessor {
+    std::string val;
+
+    Name(const nlohmann::json & json) {
+        try {
+            val = json;
+            if (val.empty()) throw EvalError("empty attribute name");
+        } catch (...) {
+            throw TypeError("could not create an attrname out of json: %s", json.dump());
+        }
+    }
+
+    Value * getIn(EvalState & state, Bindings & autoArgs, Value & v) {
+        if (v.type() != nAttrs)
+            throw TypeError("tried to get an attrname in %s", showType(v));
+
+        auto pair = v.attrs->find(state.symbols.create(val));
+
+        if (pair) return pair->value;
+        else throw EvalError("name not in attrs: '%s'", val);
+    }
+
+    std::string key() {
+        return "attr";
+    }
+
+    nlohmann::json toJson() {
+        return val;
+    }
+};
+
+static std::unique_ptr<Accessor> accessorFromJson(const nlohmann::json & json) {
+    try {
+        return std::make_unique<Index>(json);
+    } catch (...) {
+        try {
+            return std::make_unique<Name>(json);
+        } catch (...) {
+            throw TypeError("could not make an accessor out of json: %s", json.dump());
+        }
+    }
+}
+
+static void accessorCollector(
+    EvalState & state,
+    Bindings & autoArgs,
+    AutoCloseFD & to,
+    AutoCloseFD & from)
+{
+    auto vRoot = topLevelValue(state, autoArgs);
+
+    nlohmann::json reply;
+
+    if (auto drv = getDerivation(state, *vRoot, false)) {
+        reply = Drv(state, *drv);
+
+    } else {
+        std::vector<std::string> attrs;
+        std::vector<unsigned long> indices;
+        unsigned long i = 0;
+
+        switch (vRoot->type()) {
+
+        case nAttrs:
+            for (auto & a : vRoot->attrs->lexicographicOrder())
+                attrs.push_back(a->name);
+
+            reply["attrs"] = attrs;
+            break;
+
+        case nList:
+            #pragma GCC diagnostic ignored "-Wunused-variable"
+            #pragma clang diagnostic ignored "-Wunused-variable"
+            for (auto & _ : vRoot->listItems())
+                indices.push_back(i++);
+            #pragma GCC diagnostic warning "-Wunused-variable"
+            #pragma clang diagnostic warning "-Wunused-variable"
+
+            reply["indices"] = indices;
+            break;
+
+        default:
+            std::stringstream ss;
+            ss << "top level value is '" << showType(*vRoot) << "', expected a derivation or a set or list of derivations.";
+
+            reply["error"] = ss.str();
+        }
+    }
+
+    writeLine(to.get(), reply.dump());
+}
+
 static void worker(
     EvalState & state,
     Bindings & autoArgs,
