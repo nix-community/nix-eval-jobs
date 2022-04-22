@@ -41,6 +41,51 @@ def common_test(extra_args: List[str]) -> None:
         assert substituted_job["name"].startswith("hello-")
         assert substituted_job["meta"]['broken'] is False
 
+def list_test(extra_args: List[str]) -> None:
+    with TemporaryDirectory() as tempdir:
+        cmd = [str(BIN), "--gc-roots-dir", tempdir, "--meta"] + extra_args
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert len(results) == 2
+
+        built_job = results[0]
+        assert built_job["index"] == 0
+        assert built_job["name"] == "job1"
+        assert built_job["outputs"]["out"].startswith("/nix/store")
+        assert built_job["drvPath"].endswith(".drv")
+        assert built_job["meta"]['broken'] is False
+
+        substituted_job = results[1]
+        assert substituted_job["index"] == 1
+        assert substituted_job["name"].startswith("hello-")
+        assert substituted_job["meta"]['broken'] is False
+
+def single_drv_test(extra_args: List[str]) -> None:
+    with TemporaryDirectory() as tempdir:
+        cmd = [str(BIN), "--gc-roots-dir", tempdir, "--meta"] + extra_args
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert len(results) == 1
+
+        built_job = results[0]
+        assert built_job["name"] == "job1"
+        assert built_job["outputs"]["out"].startswith("/nix/store")
+        assert built_job["drvPath"].endswith(".drv")
+        assert built_job["meta"]['broken'] is False
 
 def test_flake() -> None:
     common_test(["--flake", ".#hydraJobs"])
@@ -48,3 +93,5 @@ def test_flake() -> None:
 
 def test_expression() -> None:
     common_test(["ci.nix"])
+    list_test(["list.nix"])
+    single_drv_test(["drv.nix"])
