@@ -49,6 +49,7 @@ USAGE: nix-eval-jobs [options] expr
   --arg                  Pass the value *expr* as the argument *name* to Nix functions.
   --argstr               Pass the string *string* as the argument *name* to Nix functions.
   --debug                Set the logging verbosity level to 'debug'.
+  --depth                maximum evaluation depth
   --eval-store           The Nix store to use for evaluations.
   --flake                build a flake
   --gc-roots-dir         garbage collector roots directory
