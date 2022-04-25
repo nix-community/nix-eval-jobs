@@ -45,8 +45,11 @@ using namespace nix;
 typedef enum { evalAuto, evalImpure, evalPure } pureEval;
 
 // Safe to ignore - the args will be static.
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#elif __clang__
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
+#endif
 struct MyArgs : MixEvalArgs, MixCommonArgs
 {
     Path releaseExpr;
@@ -130,8 +133,11 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
         expectArg("expr", &releaseExpr);
     }
 };
+#ifdef __GNUC__
 #pragma GCC diagnostic warning "-Wnon-virtual-dtor"
+#elif __clang__
 #pragma clang diagnostic warning "-Wnon-virtual-dtor"
+#endif
 
 static MyArgs myArgs;
 
@@ -369,12 +375,18 @@ static void accessorCollector(
             break;
 
         case nList:
+            #ifdef __GNUC__
             #pragma GCC diagnostic ignored "-Wunused-variable"
+            #elif __clang__
             #pragma clang diagnostic ignored "-Wunused-variable"
+            #endif
             for (auto & _ : vRoot->listItems())
                 indices.push_back(i++);
+            #ifdef __GNUC__
             #pragma GCC diagnostic warning "-Wunused-variable"
+            #elif __clang__
             #pragma clang diagnostic warning "-Wunused-variable"
+            #endif
 
             reply["indices"] = indices;
             break;
