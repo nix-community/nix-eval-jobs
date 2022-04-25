@@ -277,21 +277,14 @@ struct Index : Accessor {
     }
 
     Value * getIn(EvalState & state, Bindings & autoArgs, Value & v) {
-        unsigned long i = val;
 
         if (v.type() != nList)
             throw TypeError("tried to get an index in %s", showType(v));
 
-        for (auto el : v.listItems()) {
-            if (i == 0) {
-                auto x = state.allocValue();
-                state.autoCallFunction(autoArgs, *el, *x);
-                return x;
-            }
-            else --i;
-        }
+        if (val >= v.listSize())
+            throw EvalError("index %d out of bounds", val);
 
-        throw EvalError("index %d out of bounds", val);
+        return v.listElems()[val];
     }
 
     std::string key() {
