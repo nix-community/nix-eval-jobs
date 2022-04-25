@@ -252,12 +252,10 @@ static void to_json(nlohmann::json & json, const Drv & drv) {
 
 }
 
-/* Ways to look into the top-level value */
+/* Ways to look into a value */
 class Accessor {
 public:
     virtual Value * getIn(EvalState & state, Bindings & autoArgs, Value & v) = 0;
-
-    virtual std::string key() = 0;
 
     virtual nlohmann::json toJson() = 0;
 
@@ -285,10 +283,6 @@ struct Index : Accessor {
             throw EvalError("index %d out of bounds", val);
 
         return v.listElems()[val];
-    }
-
-    std::string key() {
-        return "index";
     }
 
     nlohmann::json toJson() {
@@ -319,15 +313,10 @@ struct Name : Accessor {
         else throw EvalError("name not in attrs: '%s'", val);
     }
 
-    std::string key() {
-        return "attr";
-    }
-
     nlohmann::json toJson() {
         return val;
     }
 };
-
 static std::unique_ptr<Accessor> accessorFromJson(const nlohmann::json & json) {
     try {
         return std::make_unique<Index>(json);
@@ -339,6 +328,51 @@ static std::unique_ptr<Accessor> accessorFromJson(const nlohmann::json & json) {
         }
     }
 }
+
+struct AccessorPath {
+    std::vector<std::unique_ptr<Accessor>> path;
+
+    AccessorPath(std::string & s) {
+        nlohmann::json json;
+        try {
+            json = nlohmann::json::parse(s);
+
+        } catch (nlohmann::json::exception & e) {
+            throw TypeError("error parsing accessor path json: %s", s);
+        }
+
+        try {
+            std::vector<nlohmann::json> vec;
+            for (auto j : vec)
+                this->path.push_back(std::move(accessorFromJson(j)));
+
+        } catch (nlohmann::json::exception & e) {
+            throw TypeError("could not make an accessor path out of json, expected a list of accessors: %s", json.dump());
+        }
+    }
+
+    std::optional<Value *> walk(EvalState & state, Bindings & autoArgs, Value & vTop) {
+        Value * v = &vTop;
+
+        if (path.empty())
+            return std::nullopt;
+
+        for (auto & a : path)
+            v = a->getIn(state, autoArgs, *v);
+
+        return v;
+    }
+
+    nlohmann::json toJson() {
+        std::vector<nlohmann::json> res;
+        for (auto & a : path)
+            res.push_back(a->toJson());
+
+        return res;
+    }
+
+    ~AccessorPath() { }
+};
 
 static void initialAccessorCollector(
     EvalState & state,
@@ -354,15 +388,15 @@ static void initialAccessorCollector(
         reply = Drv(state, *drv);
 
     } else {
-        std::vector<std::string> attrs;
-        std::vector<unsigned long> indices;
+        std::vector<std::vector<std::string>> attrs;
+        std::vector<std::vector<unsigned long>> indices;
         unsigned long i = 0;
 
         switch (vRoot->type()) {
 
         case nAttrs:
             for (auto & a : vRoot->attrs->lexicographicOrder())
-                attrs.push_back(a->name);
+                attrs.push_back({a->name});
 
             reply["attrs"] = attrs;
             break;
@@ -374,7 +408,7 @@ static void initialAccessorCollector(
             #pragma clang diagnostic ignored "-Wunused-variable"
             #endif
             for (auto & _ : vRoot->listItems())
-                indices.push_back(i++);
+                indices.push_back({i++});
             #ifdef __GNUC__
             #pragma GCC diagnostic warning "-Wunused-variable"
             #elif __clang__
@@ -410,23 +444,23 @@ static void worker(
         auto s = readLine(from.get());
         if (s == "exit") break;
         if (!hasPrefix(s, "do ")) abort();
-        auto accessorStr = std::string(s, 3);
+        auto pathStr = std::string(s, 3);
 
-        debug("worker process %d at '%s'", getpid(), accessorStr);
+        debug("worker process %d at '%s'", getpid(), pathStr);
 
-        std::unique_ptr<Accessor> accessor;
-        try {
-            accessor = accessorFromJson(nlohmann::json::parse(accessorStr));
-        } catch (nlohmann::json::exception & e) {
-            throw EvalError("parsing accessor json from %s: %s", accessorStr, e.what());
-        }
+        AccessorPath path = AccessorPath(pathStr);
 
         /* Evaluate it and send info back to the collector. */
-        nlohmann::json reply = nlohmann::json{ { accessor->key(), accessor->toJson() } };
+        nlohmann::json reply = nlohmann::json{ { "path", path.toJson() } };
         try {
-            auto res = accessor->getIn(state, autoArgs, *vRoot);
+            auto res = path.walk(state, autoArgs, *vRoot);
+
+            Value * vEnd;
+            if (res.has_value()) vEnd = res.value();
+            else continue;
+
             auto v = state.allocValue();
-            state.autoCallFunction(autoArgs, *res, *v);
+            state.autoCallFunction(autoArgs, *vEnd, *v);
 
             if (auto drvInfo = getDerivation(state, *v, false)) {
 
@@ -447,7 +481,7 @@ static void worker(
 
             }
 
-            else throw TypeError("element at '%s' is not a derivation", accessor->toJson().dump());
+            else throw TypeError("element at '%s' is not a derivation", path.toJson().dump());
 
         } catch (EvalError & e) {
             auto err = e.info();
@@ -545,6 +579,13 @@ std::function<void()> collector(Sync<State> & state_, std::condition_variable & 
                     continue;
                 } else if (s != "next") {
                     auto json = nlohmann::json::parse(s);
+                    if (json.find("paths") != json.end()) {
+                        auto state(state_.lock());
+                        for (auto path : json["paths"])
+                            state->todo.insert(path);
+
+                        continue;
+                    }
                     throw Error("worker error: %s", (std::string) json["error"]);
                 }
 
