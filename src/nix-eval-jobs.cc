@@ -347,7 +347,7 @@ static std::unique_ptr<Accessor> accessorFromJson(const nlohmann::json & json) {
     }
 }
 
-static void accessorCollector(
+static void initialAccessorCollector(
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
@@ -607,7 +607,7 @@ void initState(Sync<State> & state_) {
        exist). Then the worker processes will hang forever waiting for
        downloads.
     */
-    auto proc = Proc(accessorCollector);
+    auto proc = Proc(initialAccessorCollector);
 
     auto s = readLine(proc.from.get());
     auto json = nlohmann::json::parse(s);
