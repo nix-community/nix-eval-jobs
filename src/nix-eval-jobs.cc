@@ -19,8 +19,6 @@
 #include <nix/logging.hh>
 #include <nix/error.hh>
 
-#include <nix/value-to-json.hh>
-
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
@@ -28,6 +26,7 @@
 #include <nlohmann/json.hpp>
 
 #include "accessor.hh"
+#include "job.hh"
 
 using namespace nix;
 
@@ -270,42 +269,6 @@ static void initialAccessorCollector(
         reply = Drv(state, *drv);
 
     } else {
-        std::vector<std::vector<std::string>> attrs;
-        std::vector<std::vector<unsigned long>> indices;
-        unsigned long i = 0;
-
-        switch (vRoot->type()) {
-
-        case nAttrs:
-            for (auto & a : vRoot->attrs->lexicographicOrder())
-                attrs.push_back({a->name});
-
-            reply["attrs"] = attrs;
-            break;
-
-        case nList:
-            #ifdef __GNUC__
-            #pragma GCC diagnostic ignored "-Wunused-variable"
-            #elif __clang__
-            #pragma clang diagnostic ignored "-Wunused-variable"
-            #endif
-            for (auto & _ : vRoot->listItems())
-                indices.push_back({i++});
-            #ifdef __GNUC__
-            #pragma GCC diagnostic warning "-Wunused-variable"
-            #elif __clang__
-            #pragma clang diagnostic warning "-Wunused-variable"
-            #endif
-
-            reply["indices"] = indices;
-            break;
-
-        default:
-            std::stringstream ss;
-            ss << "top level value is '" << showType(*vRoot) << "', expected a derivation or a set or list of derivations.";
-
-            reply["error"] = ss.str();
-        }
     }
 
     writeLine(to.get(), reply.dump());
@@ -330,19 +293,19 @@ static void worker(
 
         debug("worker process %d at '%s'", getpid(), pathStr);
 
-        AccessorPath path = AccessorPath(pathStr);
+        nlohmann::json reply;
 
         /* Evaluate it and send info back to the collector. */
-        nlohmann::json reply = nlohmann::json{ { "path", path.toJson() } };
         try {
-            auto res = path.walk(state, autoArgs, *vRoot);
+            auto path = AccessorPath(pathStr);
 
-            Value * vEnd;
-            if (res.has_value()) vEnd = res.value();
+            reply = nlohmann::json{ { "path", path.toJson() } };
+
+            auto job_ = path.walk(state, autoArgs, *vRoot);
+
+            Job * job;
+            if (job_.has_value()) job = job_.value();
             else continue;
-
-            auto v = state.allocValue();
-            state.autoCallFunction(autoArgs, *vEnd, *v);
 
             if (auto drvInfo = getDerivation(state, *v, false)) {
 
@@ -363,7 +326,7 @@ static void worker(
 
             }
 
-            else throw TypeError("element at '%s' is not a derivation", path.toJson().dump());
+            else ;
 
         } catch (EvalError & e) {
             auto err = e.info();
@@ -531,21 +494,16 @@ void initState(Sync<State> & state_) {
     if (json.find("error") != json.end()) {
         throw Error("getting initial attributes: %s", (std::string) json["error"]);
 
-    } else if (json.find("attrs") != json.end()) {
+    } else if (json.find("path") != json.end()) {
         auto state(state_.lock());
-        for (auto a : json["attrs"])
+        for (auto a : json["path"])
             state->todo.insert(a);
-
-    } else if (json.find("indices") != json.end()){
-        auto state(state_.lock());
-        for (auto i : json["indices"])
-            state->todo.insert(i);
 
     } else if (json.find("drvPath") != json.end()) {
         std::cout << json.dump() << "\n" << std::flush;
 
     } else {
-        throw Error("expected object with \"error\", \"indices\", \"attrs\", or a derivation, got: %s", s);
+        throw Error("expected object with \"error\", \"path\", or a derivation, got: %s", s);
 
     }
 }
