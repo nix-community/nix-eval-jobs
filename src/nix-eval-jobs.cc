@@ -26,6 +26,7 @@
 #include <nlohmann/json.hpp>
 
 #include "accessor.hh"
+#include "drv.hh"
 #include "job.hh"
 
 using namespace nix;
@@ -196,65 +197,6 @@ static Value * topLevelValue(EvalState & state, Bindings & autoArgs) {
         : releaseExprTopLevelValue(state, autoArgs);
 }
 
-/* The fields of a derivation that are printed in json form */
-struct Drv {
-    std::string name;
-    std::string system;
-    std::string drvPath;
-    std::map<std::string, std::string> outputs;
-    std::optional<nlohmann::json> meta;
-
-    Drv (EvalState & state, DrvInfo & drvInfo) {
-        if (drvInfo.querySystem() == "unknown")
-            throw EvalError("derivation must have a 'system' attribute");
-
-        auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
-
-        for (auto out : drvInfo.queryOutputs(true)) {
-            if (out.second)
-                outputs[out.first] = localStore->printStorePath(*out.second);
-
-        }
-
-        if (myArgs.meta) {
-            nlohmann::json meta_;
-            for (auto & name : drvInfo.queryMetaNames()) {
-                PathSet context;
-                std::stringstream ss;
-
-                auto metaValue = drvInfo.queryMeta(name);
-                // Skip non-serialisable types
-                // TODO: Fix serialisation of derivations to store paths
-                if (metaValue == 0) {
-                    continue;
-                }
-
-                printValueAsJSON(state, true, *metaValue, noPos, ss, context);
-
-                meta_[name] = nlohmann::json::parse(ss.str());
-            }
-            meta = meta_;
-        }
-
-        name = drvInfo.queryName();
-        system = drvInfo.querySystem();
-        drvPath = localStore->printStorePath(drvInfo.requireDrvPath());
-    }
-};
-
-static void to_json(nlohmann::json & json, const Drv & drv) {
-    json = nlohmann::json{
-        { "name", drv.name },
-        { "system", drv.system },
-        { "drvPath", drv.drvPath },
-        { "outputs", drv.outputs },
-    };
-
-    if (drv.meta.has_value())
-        json["meta"] = drv.meta.value();
-
-}
-
 static void initialAccessorCollector(
     EvalState & state,
     Bindings & autoArgs,
@@ -266,7 +208,7 @@ static void initialAccessorCollector(
     nlohmann::json reply;
 
     if (auto drv = getDerivation(state, *vRoot, false)) {
-        reply = Drv(state, *drv);
+        reply = Drv(state, *drv, myArgs.meta);
 
     } else {
     }
