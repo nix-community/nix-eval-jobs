@@ -191,7 +191,7 @@ static Value* flakeTopLevelValue(EvalState & state, Bindings & autoArgs) {
     return vRoot;
 }
 
-Value * topLevelValue(EvalState & state, Bindings & autoArgs) {
+static Value * topLevelValue(EvalState & state, Bindings & autoArgs) {
     return myArgs.flake
         ? flakeTopLevelValue(state, autoArgs)
         : releaseExprTopLevelValue(state, autoArgs);
