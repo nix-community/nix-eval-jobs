@@ -206,76 +206,74 @@ struct State
     std::exception_ptr exc;
 };
 
-std::function<void()> collector(Sync<State> & state_, std::condition_variable & wakeup) {
-    return [&]() {
-        try {
-            std::optional<std::unique_ptr<Proc>> proc_;
+void collector(Sync<State> & state_, std::condition_variable & wakeup) {
+    try {
+        std::optional<std::unique_ptr<Proc>> proc_;
+
+        while (true) {
+
+            auto proc = proc_.has_value()
+                ? std::move(proc_.value())
+                : std::make_unique<Proc>(worker);
+
+            /* Check whether the existing worker process is still there. */
+            auto s = readLine(proc->from.get());
+            if (s == "restart") {
+                proc_ = std::nullopt;
+                continue;
+            } else if (s != "next") {
+                auto json = nlohmann::json::parse(s);
+                if (json.find("children") != json.end()) {
+                    auto state(state_.lock());
+                    for (auto path : json["children"])
+                        state->todo.insert(path);
+
+                    continue;
+                }
+                throw Error("worker error: %s", (std::string) json["error"]);
+            }
+
+            /* Wait for a job name to become available. */
+            nlohmann::json accessor;
 
             while (true) {
-
-                auto proc = proc_.has_value()
-                    ? std::move(proc_.value())
-                    : std::make_unique<Proc>(worker);
-
-                /* Check whether the existing worker process is still there. */
-                auto s = readLine(proc->from.get());
-                if (s == "restart") {
-                    proc_ = std::nullopt;
-                    continue;
-                } else if (s != "next") {
-                    auto json = nlohmann::json::parse(s);
-                    if (json.find("paths") != json.end()) {
-                        auto state(state_.lock());
-                        for (auto path : json["paths"])
-                            state->todo.insert(path);
-
-                        continue;
-                    }
-                    throw Error("worker error: %s", (std::string) json["error"]);
+                checkInterrupt();
+                auto state(state_.lock());
+                if ((state->todo.empty() && state->active.empty()) || state->exc) {
+                    writeLine(proc->to.get(), "exit");
+                    return;
                 }
-
-                /* Wait for a job name to become available. */
-                nlohmann::json accessor;
-
-                while (true) {
-                    checkInterrupt();
-                    auto state(state_.lock());
-                    if ((state->todo.empty() && state->active.empty()) || state->exc) {
-                        writeLine(proc->to.get(), "exit");
-                        return;
-                    }
-                    if (!state->todo.empty()) {
-                        accessor = *state->todo.begin();
-                        state->todo.erase(state->todo.begin());
-                        state->active.insert(accessor);
-                        break;
-                    } else
-                        state.wait(wakeup);
-                }
-
-                /* Tell the worker to evaluate it. */
-                writeLine(proc->to.get(), "do " + accessor.dump());
-
-                /* Wait for the response. */
-                auto respString = readLine(proc->from.get());
-                auto response = nlohmann::json::parse(respString);
-
-                proc_ = std::move(proc);
-
-                /* Print the response. */
-                {
-                    auto state(state_.lock());
-                    std::cout << response << "\n" << std::flush;
-                    state->active.erase(accessor);
-                    wakeup.notify_all();
-                }
+                if (!state->todo.empty()) {
+                    accessor = *state->todo.begin();
+                    state->todo.erase(state->todo.begin());
+                    state->active.insert(accessor);
+                    break;
+                } else
+                    state.wait(wakeup);
             }
-        } catch (...) {
-            auto state(state_.lock());
-            state->exc = std::current_exception();
-            wakeup.notify_all();
+
+            /* Tell the worker to evaluate it. */
+            writeLine(proc->to.get(), "do " + accessor.dump());
+
+            /* Wait for the response. */
+            auto respString = readLine(proc->from.get());
+            auto response = nlohmann::json::parse(respString);
+
+            proc_ = std::move(proc);
+
+            /* Print the response. */
+            {
+                auto state(state_.lock());
+                std::cout << response << "\n" << std::flush;
+                state->active.erase(accessor);
+                wakeup.notify_all();
+            }
         }
-    };
+    } catch (...) {
+        auto state(state_.lock());
+        state->exc = std::current_exception();
+        wakeup.notify_all();
+    }
 }
 
 void initState(Sync<State> & state_) {
@@ -349,7 +347,7 @@ int main(int argc, char * * argv)
         std::vector<std::thread> threads;
         std::condition_variable wakeup;
         for (size_t i = 0; i < myArgs.nrWorkers; i++)
-            threads.emplace_back(std::thread(collector(state_, wakeup)));
+            threads.emplace_back(std::thread([&]() { collector(state_, wakeup); }));
 
         for (auto & thread : threads)
             thread.join();
