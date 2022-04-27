@@ -5,6 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "args.hh"
+
 using namespace nix;
 
 namespace nix_eval_jobs {
