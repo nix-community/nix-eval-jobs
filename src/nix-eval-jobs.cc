@@ -198,30 +198,8 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
                 continue;
             } else if (s != "next") {
                 auto json = nlohmann::json::parse(s);
-                if (json.find("children") != json.end()) {
-
-                    if (json.find("path") != json.end()) {
-                        try {
-                            std::vector<nlohmann::json> children = json["children"];
-                            std::vector<nlohmann::json> path = json["path"];
-
-                            auto state(state_.lock());
-                            for (auto & child : children) {
-                                path.push_back(child);
-                                state->todo.insert(path);
-                                path.pop_back();
-                            }
-                        } catch (nlohmann::json::exception & e) {
-                            throw EvalError("expected an array of children and a path from worker, got %s", json.dump());
-                        }
-
-                        continue;
-
-                    } else {
-                        throw EvalError("worker returned children with no path.");
-                    }
-                }
-                throw Error("worker error: %s", (std::string) json["error"]);
+                if (json.find("error") != json.end())
+                    throw Error("worker error: %s", (std::string) json["error"]);
             }
 
             /* Wait for a job name to become available. */
@@ -249,6 +227,29 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
             /* Wait for the response. */
             auto respString = readLine(proc->from.get());
             auto response = nlohmann::json::parse(respString);
+
+            if (response.find("children") != response.end()) {
+                if (response.find("path") != response.end()) {
+                    try {
+                        std::vector<nlohmann::json> children = response["children"];
+                        std::vector<nlohmann::json> path = response["path"];
+
+                        auto state(state_.lock());
+                        for (auto & child : children) {
+                            path.push_back(child);
+                            state->todo.insert(path);
+                            path.pop_back();
+                        }
+                    } catch (nlohmann::json::exception & e) {
+                        throw EvalError("expected an array of children and a path from worker, got %s", response.dump());
+                    }
+
+                    continue;
+
+                } else {
+                  throw EvalError("worker returned children with no path, got: %s", response.dump());
+                }
+            }
 
             proc_ = std::move(proc);
 
