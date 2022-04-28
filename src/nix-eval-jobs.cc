@@ -4,19 +4,8 @@
 
 #include <nix/config.h>
 #include <nix/shared.hh>
-#include <nix/store-api.hh>
-#include <nix/eval.hh>
-#include <nix/eval-inline.hh>
-#include <nix/util.hh>
-#include <nix/get-drvs.hh>
-#include <nix/globals.hh>
-#include <nix/flake/flakeref.hh>
 #include <nix/flake/flake.hh>
 #include <nix/attr-path.hh>
-#include <nix/derivations.hh>
-#include <nix/local-fs-store.hh>
-#include <nix/logging.hh>
-#include <nix/error.hh>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -24,11 +13,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "accessor.hh"
 #include "args.hh"
-#include "drv.hh"
-#include "job.hh"
 #include "proc.hh"
+#include "job.hh"
 
 using namespace nix;
 
@@ -105,14 +92,19 @@ static void initialAccessorCollector(
     AutoCloseFD & to,
     AutoCloseFD & from)
 {
-    auto vRoot = topLevelValue(state, autoArgs);
-
     nlohmann::json reply;
 
-    if (auto drv = getDerivation(state, *vRoot, false)) {
-        reply = Drv(state, *drv, myArgs.meta);
+    try {
+        auto vRoot = topLevelValue(state, autoArgs);
 
-    } else {
+        auto job = getJob(state, autoArgs, *vRoot);
+
+        auto res = job->eval(state);
+
+        reply.update(res->toJson());
+
+    } catch (Error & e) {
+        reply = nlohmann::json{ { "error", e.msg() } };
     }
 
     writeLine(to.get(), reply.dump());
@@ -145,32 +137,11 @@ static void worker(
 
             reply = nlohmann::json{ { "path", path.toJson() } };
 
-            auto job_ = path.walk(state, autoArgs, *vRoot);
+            auto job = path.walk(state, autoArgs, *vRoot);
 
-            Job * job;
-            if (job_.has_value()) job = job_.value();
-            else continue;
+            auto res = job->eval(state);
 
-            if (auto drvInfo = getDerivation(state, *v, false)) {
-
-                auto drv = Drv(state, *drvInfo);
-                reply.update(drv);
-
-                /* Register the derivation as a GC root.  !!! This
-                   registers roots for jobs that we may have already
-                   done. */
-                if (myArgs.gcRootsDir != "") {
-                    Path root = myArgs.gcRootsDir + "/" + std::string(baseNameOf(drv.drvPath));
-                    if (!pathExists(root)) {
-                        auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
-                        auto storePath = localStore->parseStorePath(drv.drvPath);
-                        localStore->addPermRoot(storePath, root);
-                    }
-                }
-
-            }
-
-            else ;
+            reply.update(res->toJson());
 
         } catch (EvalError & e) {
             auto err = e.info();
@@ -292,16 +263,16 @@ void initState(Sync<State> & state_) {
     if (json.find("error") != json.end()) {
         throw Error("getting initial attributes: %s", (std::string) json["error"]);
 
-    } else if (json.find("path") != json.end()) {
+    } else if (json.find("children") != json.end()) {
         auto state(state_.lock());
-        for (auto a : json["path"])
-            state->todo.insert(a);
+        for (auto a : json["children"])
+            state->todo.insert(nlohmann::json{a});
 
     } else if (json.find("drvPath") != json.end()) {
         std::cout << json.dump() << "\n" << std::flush;
 
     } else {
-        throw Error("expected object with \"error\", \"path\", or a derivation, got: %s", s);
+        throw Error("expected object with \"error\", \"children\", or a derivation, got: %s", s);
 
     }
 }
