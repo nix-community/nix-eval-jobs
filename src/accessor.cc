@@ -60,6 +60,13 @@ Name::Name(const Name & that) {
     this->val = that.val;
 }
 
+static Value * force(EvalState & state, Bindings & autoArgs, Value & v) {
+    auto vNext = state.allocValue();
+    state.autoCallFunction(autoArgs, v, *vNext);
+    state.forceValue(*vNext, noPos);
+    return vNext;
+}
+
 /* getIn : Accessor -> EvalState -> Bindings -> Value -> Value */
 
 Value * Index::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
@@ -70,7 +77,7 @@ Value * Index::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
     if (val >= v.listSize())
         throw EvalError("index %d out of bounds", val);
 
-    return v.listElems()[val];
+    return force(state, autoArgs, *v.listElems()[val]);
 }
 
 Value * Name::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
@@ -79,7 +86,7 @@ Value * Name::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
 
     auto pair = v.attrs->find(state.symbols.create(val));
 
-    if (pair) return pair->value;
+    if (pair) return force(state, autoArgs, *pair->value);
     else throw EvalError("name not in attrs: '%s'", val);
 }
 
