@@ -104,7 +104,7 @@ AccessorPath::AccessorPath(std::string & s) {
     }
 
     try {
-        std::vector<nlohmann::json> vec;
+        std::vector<nlohmann::json> vec = json;
         for (auto j : vec)
             this->path.push_back(std::move(accessorFromJson(j)));
 
@@ -117,9 +117,6 @@ AccessorPath::AccessorPath(std::string & s) {
 
 std::unique_ptr<Job> AccessorPath::walk(EvalState & state, Bindings & autoArgs, Value & vRoot) {
     Value * v = &vRoot;
-
-    if (path.empty())
-        throw EvalError("accessor path was empty.");
 
     for (auto & a : path)
         v = a->getIn(state, autoArgs, *v);
