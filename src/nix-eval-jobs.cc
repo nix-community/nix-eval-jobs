@@ -195,11 +195,27 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
             } else if (s != "next") {
                 auto json = nlohmann::json::parse(s);
                 if (json.find("children") != json.end()) {
-                    auto state(state_.lock());
-                    for (auto path : json["children"])
-                        state->todo.insert(path);
 
-                    continue;
+                    if (json.find("path") != json.end()) {
+                        try {
+                            std::vector<nlohmann::json> children = json["children"];
+                            std::vector<nlohmann::json> path = json["path"];
+
+                            auto state(state_.lock());
+                            for (auto & child : children) {
+                                path.push_back(child);
+                                state->todo.insert(path);
+                                path.pop_back();
+                            }
+                        } catch (nlohmann::json::exception & e) {
+                            throw EvalError("expected an array of children and a path from worker, got %s", json.dump());
+                        }
+
+                        continue;
+
+                    } else {
+                        throw EvalError("worker returned children with no path.");
+                    }
                 }
                 throw Error("worker error: %s", (std::string) json["error"]);
             }
@@ -266,7 +282,7 @@ void initState(Sync<State> & state_) {
     } else if (json.find("children") != json.end()) {
         auto state(state_.lock());
         for (auto a : json["children"])
-            state->todo.insert(nlohmann::json{a});
+            state->todo.insert(std::vector({a}));
 
     } else if (json.find("drvPath") != json.end()) {
         std::cout << json.dump() << "\n" << std::flush;
