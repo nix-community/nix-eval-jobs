@@ -97,13 +97,13 @@ struct MyArgs : MixEvalArgs, MixCommonArgs
 
         expectArg("expr", &releaseExpr);
     }
+
+  ~MyArgs() { }
 };
 #ifdef __GNUC__
 #pragma GCC diagnostic warning "-Wnon-virtual-dtor"
 #elif __clang__
 #pragma clang diagnostic warning "-Wnon-virtual-dtor"
 #endif
-
-static MyArgs myArgs;
 
 }

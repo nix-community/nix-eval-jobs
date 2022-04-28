@@ -8,6 +8,7 @@ using namespace nix;
 namespace nix_eval_jobs {
 
 class Job;
+struct MyArgs;
 
 /* Ways to look into a value.  This is how nix-eval-jobs "recurses"
    over nix exprs. Accessor gets the next elem, AccessorPath finds a
@@ -50,7 +51,7 @@ struct AccessorPath {
     std::vector<std::unique_ptr<Accessor>> path;
     AccessorPath(std::string & s);
     /* walk : AccessorPath -> EvalState -> Bindings -> Value -> Job */
-    std::unique_ptr<Job> walk(EvalState & state, Bindings & autoArgs, Value & vRoot);
+    std::unique_ptr<Job> walk(MyArgs & myArgs, EvalState & state, Bindings & autoArgs, Value & vRoot);
     nlohmann::json toJson();
     ~AccessorPath() { }
 };

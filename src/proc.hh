@@ -5,14 +5,16 @@ using namespace nix;
 
 namespace nix_eval_jobs {
 
-typedef std::function<void(EvalState & state, Bindings & autoArgs, AutoCloseFD & to, AutoCloseFD & from)>
+struct MyArgs;
+
+typedef std::function<void(MyArgs & myArgs, EvalState & state, Bindings & autoArgs, AutoCloseFD & to, AutoCloseFD & from)>
     Processor;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
     AutoCloseFD to, from;
     Pid pid;
-    Proc(const Processor & proc);
+    Proc(MyArgs & myArgs, const Processor & proc);
     ~Proc() { }
 };
 

@@ -2,6 +2,7 @@
 #include <nix/eval.hh>
 #include <nlohmann/json.hpp>
 
+#include "args.hh"
 #include "job.hh"
 #include "accessor.hh"
 
@@ -115,7 +116,7 @@ AccessorPath::AccessorPath(std::string & s) {
 
 /* walk : AccessorPath -> EvalState -> Bindings -> Value -> Job */
 
-std::unique_ptr<Job> AccessorPath::walk(EvalState & state, Bindings & autoArgs, Value & vRoot) {
+std::unique_ptr<Job> AccessorPath::walk(MyArgs & myArgs, EvalState & state, Bindings & autoArgs, Value & vRoot) {
     Value * v = &vRoot;
 
     for (auto & a : path)
@@ -124,7 +125,7 @@ std::unique_ptr<Job> AccessorPath::walk(EvalState & state, Bindings & autoArgs, 
     auto vRes = state.allocValue();
     state.autoCallFunction(autoArgs, *v, *vRes);
 
-    return getJob(state, autoArgs, *vRes);
+    return getJob(myArgs, state, autoArgs, *vRes);
 }
 
 /* toJson : ToJson -> json */

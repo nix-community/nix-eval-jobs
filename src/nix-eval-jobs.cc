@@ -34,6 +34,8 @@ using namespace nix_eval_jobs;
    garbage collector by simply freeing the whole heap when required.
  */
 
+static MyArgs myArgs;
+
 static Value* releaseExprTopLevelValue(EvalState & state, Bindings & autoArgs) {
     Value vTop;
 
@@ -87,6 +89,7 @@ static Value * topLevelValue(EvalState & state, Bindings & autoArgs) {
 }
 
 static void initialAccessorCollector(
+    MyArgs & myArgs,
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
@@ -97,9 +100,9 @@ static void initialAccessorCollector(
     try {
         auto vRoot = topLevelValue(state, autoArgs);
 
-        auto job = getJob(state, autoArgs, *vRoot);
+        auto job = getJob(myArgs, state, autoArgs, *vRoot);
 
-        auto res = job->eval(state);
+        auto res = job->eval(myArgs, state);
 
         reply.update(res->toJson());
 
@@ -111,6 +114,7 @@ static void initialAccessorCollector(
 }
 
 static void worker(
+    MyArgs & myArgs,
     EvalState & state,
     Bindings & autoArgs,
     AutoCloseFD & to,
@@ -137,9 +141,9 @@ static void worker(
 
             reply = nlohmann::json{ { "path", path.toJson() } };
 
-            auto job = path.walk(state, autoArgs, *vRoot);
+            auto job = path.walk(myArgs, state, autoArgs, *vRoot);
 
-            auto res = job->eval(state);
+            auto res = job->eval(myArgs, state);
 
             reply.update(res->toJson());
 
@@ -185,7 +189,7 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
 
             auto proc = proc_.has_value()
                 ? std::move(proc_.value())
-                : std::make_unique<Proc>(worker);
+                : std::make_unique<Proc>(myArgs, worker);
 
             /* Check whether the existing worker process is still there. */
             auto s = readLine(proc->from.get());
@@ -271,7 +275,7 @@ void initState(Sync<State> & state_) {
        exist). Then the worker processes will hang forever waiting for
        downloads.
     */
-    auto proc = Proc(initialAccessorCollector);
+    auto proc = Proc(myArgs, initialAccessorCollector);
 
     auto s = readLine(proc.from.get());
     auto json = nlohmann::json::parse(s);

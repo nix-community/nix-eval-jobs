@@ -15,7 +15,7 @@ namespace nix_eval_jobs {
 
 /* Job */
 
-Drv::Drv(EvalState & state, Value & v) {
+Drv::Drv(MyArgs & myArgs, EvalState & state, Value & v) {
     auto d = getDerivation(state, v, false);
     if (d) {
         auto drvInfo = *d;
@@ -108,7 +108,7 @@ std::vector<std::unique_ptr<Accessor>> JobList::children() {
 
 /* eval : Job -> EvalState -> JobEvalResult */
 
-std::unique_ptr<JobEvalResult> Drv::eval(EvalState & state) {
+std::unique_ptr<JobEvalResult> Drv::eval(MyArgs & myArgs, EvalState & state) {
     /* Register the derivation as a GC root.  !!! This
        registers roots for jobs that we may have already
        done. */
@@ -124,11 +124,11 @@ std::unique_ptr<JobEvalResult> Drv::eval(EvalState & state) {
     return std::make_unique<Drv>(*this);
 }
 
-std::unique_ptr<JobEvalResult> JobAttrs::eval(EvalState & state) {
+std::unique_ptr<JobEvalResult> JobAttrs::eval(MyArgs & myArgs, EvalState & state) {
     return std::make_unique<JobChildren>(*this);
 }
 
-std::unique_ptr<JobEvalResult> JobList::eval(EvalState & state) {
+std::unique_ptr<JobEvalResult> JobList::eval(MyArgs & myArgs, EvalState & state) {
     return std::make_unique<JobChildren>(*this);
 }
 

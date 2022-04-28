@@ -8,7 +8,9 @@
 
 namespace nix_eval_jobs {
 
-Proc::Proc(const Processor & proc) {
+struct MyArgs;
+
+Proc::Proc(MyArgs & myArgs, const Processor & proc) {
     Pipe toPipe, fromPipe;
     toPipe.create();
     fromPipe.create();
@@ -22,7 +24,7 @@ Proc::Proc(const Processor & proc) {
             try {
                 EvalState state(myArgs.searchPath, openStore());
                 Bindings & autoArgs = *myArgs.getAutoArgs(state);
-                proc(state, autoArgs, *to, *from);
+                proc(myArgs, state, autoArgs, *to, *from);
             } catch (Error & e) {
                 nlohmann::json err;
                 auto msg = e.msg();
