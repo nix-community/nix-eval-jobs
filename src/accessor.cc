@@ -33,7 +33,7 @@ Index::Index(const nlohmann::json & json) {
 }
 
 Index::Index(unsigned long val) {
-    val = val;
+    this->val = val;
 }
 
 Index::Index(const Index & that) {
@@ -106,7 +106,7 @@ AccessorPath::AccessorPath(std::string & s) {
     try {
         std::vector<nlohmann::json> vec = json;
         for (auto j : vec)
-            this->path.push_back(std::move(accessorFromJson(j)));
+            this->path.push_back(accessorFromJson(j));
 
     } catch (nlohmann::json::exception & e) {
         throw TypeError("could not make an accessor path out of json, expected a list of accessors: %s", json.dump());
