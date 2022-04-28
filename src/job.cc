@@ -158,7 +158,8 @@ nlohmann::json Drv::toJson() {
     json["drvPath"] = this->drvPath;
     json["outputs"] = this->outputs;
 
-    if (this->meta) json["meta"] = *this->meta;
+    if (this->meta.has_value())
+      json["meta"] = this->meta.value();
 
     return json;
 }
