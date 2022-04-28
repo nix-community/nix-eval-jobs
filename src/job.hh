@@ -57,7 +57,6 @@ struct Drv : Job, JobEvalResult {
     std::map<std::string, std::string> outputs;
     std::optional<nlohmann::json> meta;
     Drv(EvalState & state, Value & v);
-    Drv(const Drv & drv);
     std::unique_ptr<JobEvalResult> eval(EvalState & state) override;
     nlohmann::json toJson() override;
     ~Drv() { }

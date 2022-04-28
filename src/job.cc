@@ -15,14 +15,6 @@ namespace nix_eval_jobs {
 
 /* Job */
 
-Drv::Drv(const Drv & drv) {
-    this->name = drv.name;
-    this->system = drv.system;
-    this->drvPath = drv.drvPath;
-    this->outputs = drv.outputs;
-    this->meta = drv.meta;
-}
-
 Drv::Drv(EvalState & state, Value & v) {
     auto d = getDerivation(state, v, false);
     if (d) {
@@ -35,7 +27,7 @@ Drv::Drv(EvalState & state, Value & v) {
 
         for (auto out : drvInfo.queryOutputs(true)) {
             if (out.second)
-                outputs[out.first] = localStore->printStorePath(*out.second);
+                this->outputs[out.first] = localStore->printStorePath(*out.second);
 
         }
 
@@ -56,12 +48,12 @@ Drv::Drv(EvalState & state, Value & v) {
 
                 meta_[name] = nlohmann::json::parse(ss.str());
             }
-            meta = meta_;
+            this->meta = meta_;
         }
 
-        name = drvInfo.queryName();
-        system = drvInfo.querySystem();
-        drvPath = localStore->printStorePath(drvInfo.requireDrvPath());
+        this->name = drvInfo.queryName();
+        this->system = drvInfo.querySystem();
+        this->drvPath = localStore->printStorePath(drvInfo.requireDrvPath());
     }
 
     else throw TypeError("expected a Drv, got: %s", showType(v));
