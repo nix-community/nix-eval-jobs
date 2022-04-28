@@ -1,7 +1,9 @@
+#include <nix/config.h>
 #include <nix/eval.hh>
 #include <nlohmann/json.hpp>
 
 #include "job.hh"
+#include "accessor.hh"
 
 using namespace nix;
 
@@ -20,6 +22,8 @@ static std::unique_ptr<Accessor> accessorFromJson(const nlohmann::json & json) {
     }
 }
 
+/* Accessor */
+
 Index::Index(const nlohmann::json & json) {
     try {
         val = json;
@@ -32,7 +36,10 @@ Index::Index(unsigned long val) {
     val = val;
 }
 
-/* An attribute name in an attrset */
+Index::Index(const Index & that) {
+    this->val = that.val;
+}
+
 Name::Name(const nlohmann::json & json) {
     try {
         val = json;
@@ -47,6 +54,12 @@ Name::Name(Symbol & sym) {
     ss << sym;
     this->val = ss.str();
 }
+
+Name::Name(const Name & that) {
+    this->val = that.val;
+}
+
+/* getIn : Accessor -> EvalState -> Bindings -> Value -> Value */
 
 Value * Index::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
 
@@ -69,6 +82,8 @@ Value * Name::getIn(EvalState & state, Bindings & autoArgs, Value & v) {
     else throw EvalError("name not in attrs: '%s'", val);
 }
 
+/* toJson : Accessor -> json */
+
 nlohmann::json Name::toJson() {
     return val;
 }
@@ -76,6 +91,8 @@ nlohmann::json Name::toJson() {
 nlohmann::json Index::toJson() {
     return val;
 }
+
+/* AccessorPath */
 
 AccessorPath::AccessorPath(std::string & s) {
     nlohmann::json json;
@@ -96,11 +113,13 @@ AccessorPath::AccessorPath(std::string & s) {
     }
 }
 
-std::optional<Job *> AccessorPath::walk(EvalState & state, Bindings & autoArgs, Value & vRoot) {
+/* walk : AccessorPath -> EvalState -> Bindings -> Value -> Job */
+
+std::unique_ptr<Job> AccessorPath::walk(EvalState & state, Bindings & autoArgs, Value & vRoot) {
     Value * v = &vRoot;
 
     if (path.empty())
-        return std::nullopt;
+        throw EvalError("accessor path was empty.");
 
     for (auto & a : path)
         v = a->getIn(state, autoArgs, *v);
@@ -111,6 +130,8 @@ std::optional<Job *> AccessorPath::walk(EvalState & state, Bindings & autoArgs, 
     return getJob(state, autoArgs, *vRes);
 }
 
+/* toJson : ToJson -> json */
+
 nlohmann::json AccessorPath::toJson() {
     std::vector<nlohmann::json> res;
     for (auto & a : path)
@@ -118,7 +139,5 @@ nlohmann::json AccessorPath::toJson() {
 
     return res;
 }
-
-AccessorPath::~AccessorPath() { }
 
 }
