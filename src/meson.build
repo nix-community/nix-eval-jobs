@@ -1,4 +1,7 @@
 src = [
+  'proc.cc',
+  'accessor.cc',
+  'job.cc',
   'nix-eval-jobs.cc',
 ]
 
