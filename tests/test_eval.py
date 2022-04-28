@@ -26,18 +26,18 @@ def common_test(extra_args: List[str]) -> None:
         assert len(results) == 3
 
         built_job = results[0]
-        assert built_job["attr"] == "builtJob"
+        assert built_job["path"] == [ "builtJob" ]
         assert built_job["name"] == "job1"
         assert built_job["outputs"]["out"].startswith("/nix/store")
         assert built_job["drvPath"].endswith(".drv")
         assert built_job["meta"]['broken'] is False
 
         nested_job = results[1]
-        assert nested_job["attr"] == "nested.job"
+        assert nested_job["path"] == ["nested.job" ]
         assert nested_job["name"].startswith("hello-")
 
         substituted_job = results[2]
-        assert substituted_job["attr"] == "substitutedJob"
+        assert substituted_job["path"] == [ "substitutedJob" ]
         assert substituted_job["name"].startswith("hello-")
         assert substituted_job["meta"]['broken'] is False
 
@@ -56,14 +56,14 @@ def list_test(extra_args: List[str]) -> None:
         assert len(results) == 2
 
         built_job = results[0]
-        assert built_job["index"] == 0
+        assert built_job["path"] == [ 0 ]
         assert built_job["name"] == "job1"
         assert built_job["outputs"]["out"].startswith("/nix/store")
         assert built_job["drvPath"].endswith(".drv")
         assert built_job["meta"]['broken'] is False
 
         substituted_job = results[1]
-        assert substituted_job["index"] == 1
+        assert substituted_job["path"] == [ 1 ]
         assert substituted_job["name"].startswith("hello-")
         assert substituted_job["meta"]['broken'] is False
 
