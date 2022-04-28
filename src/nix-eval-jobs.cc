@@ -244,11 +244,12 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
                         throw EvalError("expected an array of children and a path from worker, got %s", response.dump());
                     }
 
-                    continue;
-
                 } else {
-                  throw EvalError("worker returned children with no path, got: %s", response.dump());
+                    throw EvalError("worker returned children with no path, got: %s", response.dump());
                 }
+            } else {
+                auto state(state_.lock());
+                std::cout << response << "\n" << std::flush;
             }
 
             proc_ = std::move(proc);
@@ -256,7 +257,6 @@ void collector(Sync<State> & state_, std::condition_variable & wakeup) {
             /* Print the response. */
             {
                 auto state(state_.lock());
-                std::cout << response << "\n" << std::flush;
                 state->active.erase(accessor);
                 wakeup.notify_all();
             }

@@ -33,7 +33,7 @@ def common_test(extra_args: List[str]) -> None:
         assert built_job["meta"]['broken'] is False
 
         nested_job = results[1]
-        assert nested_job["path"] == ["nested.job" ]
+        assert nested_job["path"] == ["nested", "job" ]
         assert nested_job["name"].startswith("hello-")
 
         substituted_job = results[2]
