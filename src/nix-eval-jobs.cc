@@ -2,6 +2,7 @@
 #include <iostream>
 #include <thread>
 #include <filesystem>
+#include <assert.h>
 
 #include <nix/config.h>
 #include <nix/shared.hh>
@@ -25,6 +26,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
 
 #include <nlohmann/json.hpp>
 
@@ -266,6 +269,111 @@ static void to_json(nlohmann::json &json, const Drv &drv) {
     }
 }
 
+// Use C's FILE here as C++ ifstream cannot be created from existing file
+// descriptors
+struct BufferedFile {
+  FILE *bufferedFile;
+  size_t bufSize;
+  char* lineBuf;
+
+  BufferedFile() : bufferedFile(nullptr), bufSize(256), lineBuf(new char[bufSize]) {}
+
+  BufferedFile(int fd, const char* mode) : bufferedFile(fdopen(fd, mode)), bufSize(256), lineBuf(new char[bufSize]) {
+      if (!bufferedFile) {
+          throw SysError("cannot open socket as file");
+      }
+  }
+
+  BufferedFile & operator =(BufferedFile && that) {
+      close();
+      bufferedFile = that.bufferedFile;
+      that.bufferedFile = NULL;
+      return *this;
+   }
+
+  void close() {
+    if (bufferedFile != nullptr) {
+      fclose(bufferedFile);
+    }
+    bufferedFile = nullptr;
+  }
+
+  ~BufferedFile() {
+      delete lineBuf;
+      close();
+  }
+
+  void writeLine(std::string_view s) {
+    assert(bufferedFile != nullptr);
+
+    while (!s.empty()) {
+      const struct iovec iovec[] = {
+        { .iov_base = (void*)s.data(), .iov_len = s.size() },
+        { .iov_base = (void*)"\n", .iov_len = 1 },
+      };
+
+      ssize_t res = writev(fileno(bufferedFile), iovec, 2);
+      if (res == -1 && errno != EINTR) {
+        throw SysError("writing to file");
+      }
+      if ((size_t)res == s.size() + 1) {
+        return;
+      }
+      if ((size_t)res < s.size()) {
+        s.remove_prefix(res);
+      }
+    }
+  }
+
+  std::string_view readLine() {
+    assert(bufferedFile != nullptr);
+
+    ssize_t res = getline(&lineBuf, &bufSize, bufferedFile);
+    if (res < -1) {
+      // FIXME is throwing an error the best choice here?
+      // In nix-eval-jobs we will probably catch the error most of the time and
+      // look at the child process instead.
+      throw SysError("error readling file");
+    }
+    return {lineBuf, (size_t)res};
+  }
+};
+
+// The IPC protocol
+
+struct Message {
+  enum Type {
+    exit = 0,
+    restart = 1,
+    next = 2,
+    error = 3,
+    doEval = 4,
+    evalResult = 5
+  } type;
+  std::string value;
+};
+
+void to_json(json &j, const Message &p) {
+  j = json{{"type", p.type}, {"value", p.value}};
+}
+
+void from_json(const json &j, Message &p) {
+  j.at("type").get_to(p.type);
+  j.at("value").get_to(p.value);
+}
+
+void writeMessage(BufferedFile &sock, Message &msg) {
+  json out = msg;
+  sock.writeLine(out.dump());
+}
+
+Message readMessage(BufferedFile &sock) {
+  auto line = sock.readLine();
+  fprintf(stderr, "%s() at %s:%d: '%s'\n", __func__, __FILE__, __LINE__, line.data());
+  json v = json::parse(line);
+  return v.get<Message>();
+}
+
 std::string attrPathJoin(json input) {
     return std::accumulate(input.begin(), input.end(), std::string(),
                            [](std::string ss, std::string s) {
@@ -277,20 +385,28 @@ std::string attrPathJoin(json input) {
                            });
 }
 
-static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
-                   AutoCloseFD &from) {
+static void worker(EvalState &state, Bindings &autoArgs, BufferedFile &parentSock) {
+    fprintf(stderr, "%s() at %s:%d, %p %p %zu\n", __func__, __FILE__, __LINE__, parentSock.bufferedFile, parentSock.lineBuf, parentSock.bufSize);
     auto vRoot = topLevelValue(state, autoArgs);
+    fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
 
     while (true) {
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
         /* Wait for the collector to send us a job name. */
-        writeLine(to.get(), "next");
+        auto req = Message { Message::Type::next, ""};
+        writeMessage(parentSock, req);
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+        auto resp = readMessage(parentSock);
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
 
-        auto s = readLine(from.get());
-        if (s == "exit")
-            break;
-        if (!hasPrefix(s, "do "))
-            abort();
-        auto path = json::parse(s.substr(3));
+        if (resp.type == Message::Type::exit) {
+          break;
+        }
+        if (resp.type != Message::Type::doEval) {
+          printError("Unexpected message type %1% received", resp.type);
+          abort();
+        }
+        auto path = resp.value;
         auto attrPathS = attrPathJoin(path);
 
         debug("worker process %d at '%s'", getpid(), path);
@@ -366,7 +482,9 @@ static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
             printError(e.msg());
         }
 
-        writeLine(to.get(), reply.dump());
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+        auto evalResult = Message { Message::Type::evalResult, reply.dump() };
+        writeMessage(parentSock, evalResult);
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
@@ -376,48 +494,48 @@ static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
             break;
     }
 
-    writeLine(to.get(), "restart");
+    fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+    auto exitMsg = Message { Message::Type::evalResult, "" };
+    writeMessage(parentSock, exitMsg);
 }
 
-typedef std::function<void(EvalState &state, Bindings &autoArgs,
-                           AutoCloseFD &to, AutoCloseFD &from)>
-    Processor;
+typedef std::function<void(EvalState &state, Bindings &autoArgs, BufferedFile &parentSock)>
+  Processor;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
-    AutoCloseFD to, from;
+    BufferedFile sock;
     Pid pid;
 
     Proc(const Processor &proc) {
-        Pipe toPipe, fromPipe;
-        toPipe.create();
-        fromPipe.create();
-        auto p = startProcess(
-            [&,
-             to{std::make_shared<AutoCloseFD>(std::move(fromPipe.writeSide))},
-             from{
-                 std::make_shared<AutoCloseFD>(std::move(toPipe.readSide))}]() {
-                debug("created worker process %d", getpid());
-                try {
-                    EvalState state(myArgs.searchPath,
-                                    openStore(*myArgs.evalStoreUrl));
-                    Bindings &autoArgs = *myArgs.getAutoArgs(state);
-                    proc(state, autoArgs, *to, *from);
-                } catch (Error &e) {
-                    nlohmann::json err;
-                    auto msg = e.msg();
-                    err["error"] = filterANSIEscapes(msg, true);
-                    printError(msg);
-                    writeLine(to->get(), err.dump());
-                    // Don't forget to print it into the STDERR log, this is
-                    // what's shown in the Hydra UI.
-                    writeLine(to->get(), "restart");
-                }
-            },
-            ProcessOptions{.allowVfork = false});
+        int pair[2] = { -1, -1 };
+        if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0, pair) < 0) {
+            throw SysError("creating socketpair for ipc");
+        }
+        BufferedFile parentSock(pair[0], "r+");
+        BufferedFile childSock(pair[1], "r+");
 
-        to = std::move(toPipe.writeSide);
-        from = std::move(fromPipe.readSide);
+        auto p = startProcess([&]() {
+          debug("created worker process %d", getpid());
+          parentSock.close();
+          try {
+            EvalState state(myArgs.searchPath, openStore(*myArgs.evalStoreUrl));
+            Bindings &autoArgs = *myArgs.getAutoArgs(state);
+
+            proc(state, autoArgs, childSock);
+          } catch (Error &e) {
+            nlohmann::json err;
+            auto msg = e.msg();
+            printError(msg);
+            auto errMsg = Message { Message::Type::error, filterANSIEscapes(msg, true) };
+            writeMessage(parentSock, errMsg);
+            // FIXME if there is an error, than this is never processed
+            //auto restartMsg = Message { Message::Type::restart, "" };
+            //writeMessage(parentSock, restartMsg);
+          }
+        });
+
+        sock = std::move(parentSock);
         pid = p;
     }
 
@@ -425,149 +543,153 @@ struct Proc {
 };
 
 struct State {
-    std::set<json> todo = json::array({json::array()});
-    std::set<json> active;
-    std::exception_ptr exc;
+  std::set<json> todo = json::array({json::array()});
+  std::set<json> active;
+  std::exception_ptr exc;
 };
 
 std::function<void()> collector(Sync<State> &state_,
                                 std::condition_variable &wakeup) {
-    return [&]() {
-        try {
-            std::optional<std::unique_ptr<Proc>> proc_;
+  return [&]() {
+    try {
+      std::optional<std::unique_ptr<Proc>> proc_(std::nullopt);
 
-            while (true) {
+      while (true) {
 
-                auto proc = proc_.has_value() ? std::move(proc_.value())
-                                              : std::make_unique<Proc>(worker);
+        auto proc = proc_.has_value() ? std::move(proc_.value())
+                                      : std::make_unique<Proc>(worker);
 
-                /* Check whether the existing worker process is still there. */
-                auto s = readLine(proc->from.get());
-                if (s == "restart") {
-                    proc_ = std::nullopt;
-                    continue;
-                } else if (s != "next") {
-                    auto json = json::parse(s);
-                    throw Error("worker error: %s", (std::string)json["error"]);
-                }
-
-                /* Wait for a job name to become available. */
-                json attrPath;
-
-                while (true) {
-                    checkInterrupt();
-                    auto state(state_.lock());
-                    if ((state->todo.empty() && state->active.empty()) ||
-                        state->exc) {
-                        writeLine(proc->to.get(), "exit");
-                        return;
-                    }
-                    if (!state->todo.empty()) {
-                        attrPath = *state->todo.begin();
-                        state->todo.erase(state->todo.begin());
-                        state->active.insert(attrPath);
-                        break;
-                    } else
-                        state.wait(wakeup);
-                }
-
-                /* Tell the worker to evaluate it. */
-                writeLine(proc->to.get(), "do " + attrPath.dump());
-
-                /* Wait for the response. */
-                auto respString = readLine(proc->from.get());
-                auto response = json::parse(respString);
-
-                /* Handle the response. */
-                std::vector<json> newAttrs;
-                if (response.find("attrs") != response.end()) {
-                    for (auto &i : response["attrs"]) {
-                        json newAttr = json(response["attrPath"]);
-                        newAttr.emplace_back(i);
-                        newAttrs.push_back(newAttr);
-                    }
-                } else {
-                    auto state(state_.lock());
-                    std::cout << respString << "\n" << std::flush;
-                }
-
-                proc_ = std::move(proc);
-
-                /* Add newly discovered job names to the queue. */
-                {
-                    auto state(state_.lock());
-                    state->active.erase(attrPath);
-                    for (auto p : newAttrs) {
-                        state->todo.insert(p);
-                    }
-                    wakeup.notify_all();
-                }
-            }
-        } catch (...) {
-            auto state(state_.lock());
-            state->exc = std::current_exception();
-            wakeup.notify_all();
+        /* Check whether the existing worker process is still there. */
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+        auto message = readMessage(proc->sock);
+        if (message.type == Message::Type::restart) {
+          proc_ = std::nullopt;
+          continue;
+        } else if (message.type == Message::Type::error) {
+          throw Error("worker error: %s", message.value);
         }
-    };
+
+        /* Wait for a job name to become available. */
+        json attrPath;
+
+        while (true) {
+          checkInterrupt();
+          auto state(state_.lock());
+          if ((state->todo.empty() && state->active.empty()) || state->exc) {
+            auto msg = Message { Message::Type::exit, ""};
+            fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+            writeMessage(proc->sock, msg);
+            return;
+          }
+          if (!state->todo.empty()) {
+            attrPath = *state->todo.begin();
+            state->todo.erase(state->todo.begin());
+            state->active.insert(attrPath);
+            break;
+          } else
+            state.wait(wakeup);
+        }
+
+        /* Tell the worker to evaluate it. */
+        auto req = Message { Message::Type::doEval, attrPath.dump() };
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+        writeMessage(proc->sock, req);
+
+        /* Wait for the response. */
+        fprintf(stderr, "%s() at %s:%d\n", __func__, __FILE__, __LINE__);
+        auto resp = readMessage(proc->sock);
+        //auto response = json::parse(respString);
+
+        /* Handle the response. */
+        std::vector<json> newAttrs;
+        //if (response.find("attrs") != response.end()) {
+        //  for (auto &i : response["attrs"]) {
+        //    json newAttr = json(response["attrPath"]);
+        //    newAttr.emplace_back(i);
+        //    newAttrs.push_back(newAttr);
+        //  }
+        //} else {
+        //  auto state(state_.lock());
+        //  std::cout << respString << "\n" << std::flush;
+        //}
+
+        proc_ = std::move(proc);
+
+        /* Add newly discovered job names to the queue. */
+        {
+          auto state(state_.lock());
+          state->active.erase(attrPath);
+          for (auto p : newAttrs) {
+            state->todo.insert(p);
+          }
+          wakeup.notify_all();
+        }
+      }
+    } catch (...) {
+      auto state(state_.lock());
+      state->exc = std::current_exception();
+      wakeup.notify_all();
+    }
+  };
 }
 
 int main(int argc, char **argv) {
-    /* Prevent undeclared dependencies in the evaluation via
-       $NIX_PATH. */
-    unsetenv("NIX_PATH");
+  /* Prevent undeclared dependencies in the evaluation via
+     $NIX_PATH. */
+  unsetenv("NIX_PATH");
 
-    /* We are doing the garbage collection by killing forks */
-    setenv("GC_DONT_GC", "1", 1);
+  /* We are doing the garbage collection by killing forks */
+  setenv("GC_DONT_GC", "1", 1);
 
-    return handleExceptions(argv[0], [&]() {
-        initNix();
-        initGC();
+  return handleExceptions(argv[0], [&]() {
+    initNix();
+    initGC();
 
-        myArgs.parseCmdline(argvToStrings(argc, argv));
+    myArgs.parseCmdline(argvToStrings(argc, argv));
 
-        /* FIXME: The build hook in conjunction with import-from-derivation is
-         * causing "unexpected EOF" during eval */
-        settings.builders = "";
+    /* FIXME: The build hook in conjunction with import-from-derivation is
+     * causing "unexpected EOF" during eval */
+    settings.builders = "";
 
-        /* Prevent access to paths outside of the Nix search path and
-           to the environment. */
-        evalSettings.restrictEval = false;
+    /* Prevent access to paths outside of the Nix search path and
+       to the environment. */
+    evalSettings.restrictEval = false;
 
-        /* When building a flake, use pure evaluation (no access to
-           'getEnv', 'currentSystem' etc. */
-        if (myArgs.impure) {
-            evalSettings.pureEval = false;
-        } else if (myArgs.flake) {
-            evalSettings.pureEval = true;
-        }
+    /* When building a flake, use pure evaluation (no access to
+       'getEnv', 'currentSystem' etc. */
+    if (myArgs.impure) {
+      evalSettings.pureEval = false;
+    } else if (myArgs.flake) {
+      evalSettings.pureEval = true;
+    }
 
-        if (myArgs.releaseExpr == "")
-            throw UsageError("no expression specified");
+    if (myArgs.releaseExpr == "")
+      throw UsageError("no expression specified");
 
-        if (myArgs.gcRootsDir == "") {
-            printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
-        } else {
-            myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
-        }
+    if (myArgs.gcRootsDir == "") {
+      printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
+    } else {
+      myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
+    }
 
-        if (myArgs.showTrace) {
-            loggerSettings.showTrace.assign(true);
-        }
+    if (myArgs.showTrace) {
+      loggerSettings.showTrace.assign(true);
+    }
 
-        Sync<State> state_;
+    Sync<State> state_;
 
-        /* Start a collector thread per worker process. */
-        std::vector<std::thread> threads;
-        std::condition_variable wakeup;
-        for (size_t i = 0; i < myArgs.nrWorkers; i++)
-            threads.emplace_back(std::thread(collector(state_, wakeup)));
+    /* Start a collector thread per worker process. */
+    std::vector<std::thread> threads;
+    std::condition_variable wakeup;
+    for (size_t i = 0; i < myArgs.nrWorkers; i++)
+      threads.emplace_back(std::thread(collector(state_, wakeup)));
 
-        for (auto &thread : threads)
-            thread.join();
+    for (auto &thread : threads)
+      thread.join();
 
-        auto state(state_.lock());
+    auto state(state_.lock());
 
-        if (state->exc)
-            std::rethrow_exception(state->exc);
-    });
+    if (state->exc)
+      std::rethrow_exception(state->exc);
+  });
 }
