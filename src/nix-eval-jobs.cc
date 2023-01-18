@@ -20,6 +20,7 @@
 #include <nix/logging.hh>
 #include <nix/error.hh>
 #include <nix/installables.hh>
+#include <nix/path-with-outputs.hh>
 
 #include <nix/value-to-json.hh>
 
@@ -255,8 +256,8 @@ static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
     std::optional<InstallableFlake> flake;
     if (myArgs.flake) {
         auto [flakeRef, fragment, outputSpec] =
-            parseFlakeRefWithFragmentAndOutputsSpec(myArgs.releaseExpr,
-                                                    absPath("."));
+            parseFlakeRefWithFragmentAndExtendedOutputsSpec(myArgs.releaseExpr,
+                                                            absPath("."));
 
         flake.emplace(InstallableFlake({}, ref<EvalState>(&state),
                                        std::move(flakeRef), fragment,
@@ -264,7 +265,7 @@ static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
                                        flake::LockFlags{
                                            .updateLockFile = false,
                                            .useRegistries = false,
-                                           .allowMutable = false,
+                                           .allowUnlocked = false,
                                        }));
     };
 
@@ -328,8 +329,10 @@ static void worker(EvalState &state, Bindings &autoArgs, AutoCloseFD &to,
                         if (name == "recurseForDerivations") {
                             auto attrv =
                                 v->attrs->get(state.sRecurseForDerivations);
-                            recurse =
-                                state.forceBool(*attrv->value, attrv->pos);
+                            recurse = state.forceBool(
+                                *attrv->value, attrv->pos,
+                                "while evaluating the attribute "
+                                "`recurseForDerivations`");
                         }
                     }
                     if (recurse)
