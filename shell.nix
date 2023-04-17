@@ -15,16 +15,29 @@
 }:
 
 let
-  inherit (pkgs) lib stdenv;
+  inherit (pkgs) lib;
   nix-eval-jobs = pkgs.callPackage ./default.nix {
     inherit srcDir nix;
   };
+  # nix 2.15 no longer compiles with clang11
+  stdenv = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.clang12Stdenv else pkgs.stdenv;
 in
-pkgs.mkShell {
+stdenv.mkDerivation {
+  name = "shell";
+  phases = [ "buildPhase" ];
+
+  buildPhase = ''
+    touch $out
+  '';
+
   inherit (nix-eval-jobs) buildInputs;
   nativeBuildInputs = nix-eval-jobs.nativeBuildInputs ++ [
     pkgs.treefmt
-    pkgs.llvmPackages.clang # clang-format
+    # only import clang-format without clang
+    (pkgs.runCommand "clang-format" { } ''
+      mkdir -p $out/bin
+      ln -s ${pkgs.llvmPackages.clang-unwrapped}/bin/clang-format $out/bin/clang-format
+    '')
     pkgs.nixpkgs-fmt
     pkgs.nodePackages.prettier
 
