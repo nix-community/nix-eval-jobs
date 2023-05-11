@@ -43,6 +43,7 @@ using namespace nlohmann;
 struct MyArgs : MixEvalArgs, MixCommonArgs {
     std::string releaseExpr;
     Path gcRootsDir;
+    Path referenceLockFilePath;
     bool flake = false;
     bool fromArgs = false;
     bool meta = false;
@@ -101,6 +102,11 @@ struct MyArgs : MixEvalArgs, MixCommonArgs {
         addFlag({.longName = "flake",
                  .description = "build a flake",
                  .handler = {&flake, true}});
+        
+        addFlag({.longName = "reference-lock-file",
+                 .description = "override the flake.lock file to use",
+                 .labels = {"path"},
+                 .handler = {&referenceLockFilePath}});
 
         addFlag({.longName = "meta",
                  .description = "include derivation meta field in output",
@@ -269,13 +275,18 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
             parseFlakeRefWithFragmentAndExtendedOutputsSpec(myArgs.releaseExpr,
                                                             absPath("."));
 
+        auto lockFlags = flake::LockFlags{
+            .updateLockFile = false,
+            .useRegistries = false,
+            .allowUnlocked = false,
+        };
+        if (myArgs.referenceLockFilePath != "") {
+            lockFlags.referenceLockFilePath = myArgs.referenceLockFilePath;
+        }
+
         flake.emplace(InstallableFlake({}, state, std::move(flakeRef), fragment,
                                        outputSpec, {}, {},
-                                       flake::LockFlags{
-                                           .updateLockFile = false,
-                                           .useRegistries = false,
-                                           .allowUnlocked = false,
-                                       }));
+                                       lockFlags));
     };
 
     auto vRoot = topLevelValue(*state, autoArgs, flake);
