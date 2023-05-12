@@ -54,6 +54,13 @@ struct MyArgs : MixEvalArgs, MixCommonArgs {
     size_t nrWorkers = 1;
     size_t maxMemorySize = 4096;
 
+    flake::LockFlags lockFlags = flake::LockFlags{
+        .updateLockFile = false,
+        .useRegistries = false,
+        .allowUnlocked = false,
+        .referenceLockFilePath = std::nullopt,
+    };
+
     MyArgs() : MixCommonArgs("nix-eval-jobs") {
         addFlag({
             .longName = "help",
@@ -106,7 +113,8 @@ struct MyArgs : MixEvalArgs, MixCommonArgs {
         addFlag({.longName = "reference-lock-file",
                  .description = "override the flake.lock file to use",
                  .labels = {"path"},
-                 .handler = {&referenceLockFilePath}});
+                 .handler = {[&](std::string lockFilePath) { lockFlags.referenceLockFilePath = lockFilePath; }}
+                 });
 
         addFlag({.longName = "meta",
                  .description = "include derivation meta field in output",
@@ -275,18 +283,9 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
             parseFlakeRefWithFragmentAndExtendedOutputsSpec(myArgs.releaseExpr,
                                                             absPath("."));
 
-        auto lockFlags = flake::LockFlags{
-            .updateLockFile = false,
-            .useRegistries = false,
-            .allowUnlocked = false,
-        };
-        if (myArgs.referenceLockFilePath != "") {
-            lockFlags.referenceLockFilePath = myArgs.referenceLockFilePath;
-        }
-
         flake.emplace(InstallableFlake({}, state, std::move(flakeRef), fragment,
                                        outputSpec, {}, {},
-                                       lockFlags));
+                                       myArgs.lockFlags));
     };
 
     auto vRoot = topLevelValue(*state, autoArgs, flake);
