@@ -2,7 +2,6 @@
 #include <iostream>
 #include <thread>
 #include <filesystem>
-
 #include <nix/eval-settings.hh>
 #include <nix/config.h>
 #include <nix/shared.hh>
@@ -203,7 +202,7 @@ struct Drv {
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;
 
-    Drv(EvalState &state, DrvInfo &drvInfo) {
+    Drv(std::string &attrPath, EvalState &state, DrvInfo &drvInfo) {
 
         auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
 
@@ -214,7 +213,8 @@ struct Drv {
                         localStore->printStorePath(*out.second);
             }
         } catch (const std::exception &e) {
-            throw EvalError("derivation must have valid outputs: %s", e.what());
+            throw EvalError("derivation '%s' does not have valid outputs: %s",
+                            attrPath, e.what());
         }
 
         if (myArgs.meta) {
@@ -283,6 +283,62 @@ std::string attrPathJoin(json input) {
                            });
 }
 
+[[nodiscard]] static int tryWriteLine(int fd, std::string s) {
+    s += "\n";
+    std::string_view sv{s};
+    while (!sv.empty()) {
+        checkInterrupt();
+        ssize_t res = write(fd, sv.data(), sv.size());
+        if (res == -1 && errno != EINTR) {
+            return -errno;
+        }
+        if (res > 0) {
+            sv.remove_prefix(res);
+        }
+    }
+    return 0;
+}
+
+class LineReader {
+  public:
+    LineReader(int fd) {
+        stream = fdopen(fd, "r");
+        if (!stream) {
+            throw Error("fdopen failed: %s", strerror(errno));
+        }
+    }
+
+    ~LineReader() {
+        fclose(stream);
+        free(buffer);
+    }
+
+    LineReader(LineReader &&other) {
+        stream = other.stream;
+        other.stream = nullptr;
+        buffer = other.buffer;
+        other.buffer = nullptr;
+        len = other.len;
+        other.len = 0;
+    }
+
+    [[nodiscard]] std::string_view readLine() {
+        ssize_t read = getline(&buffer, &len, stream);
+
+        if (read == -1) {
+            return {}; // Return an empty string_view in case of error
+        }
+
+        // Remove trailing newline
+        return std::string_view(buffer, read - 1);
+    }
+
+  private:
+    FILE *stream = nullptr;
+    char *buffer = nullptr;
+    size_t len = 0;
+};
+
 static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
                    AutoCloseFD &from) {
 
@@ -301,15 +357,23 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
         }
     }();
 
+    LineReader fromReader(from.release());
+
     while (true) {
         /* Wait for the collector to send us a job name. */
-        writeLine(to.get(), "next");
+        if (tryWriteLine(to.get(), "next") < 0) {
+            return; // main process died
+        }
 
-        auto s = readLine(from.get());
-        if (s == "exit")
+        auto s = fromReader.readLine();
+        if (s == "exit") {
             break;
-        if (!hasPrefix(s, "do "))
+        }
+        if (!hasPrefix(s, "do ")) {
+            fprintf(stderr, "worker error: received invalid command '%s'\n",
+                    s.data());
             abort();
+        }
         auto path = json::parse(s.substr(3));
         auto attrPathS = attrPathJoin(path);
 
@@ -326,7 +390,7 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
 
             if (v->type() == nAttrs) {
                 if (auto drvInfo = getDerivation(*state, *v, false)) {
-                    auto drv = Drv(*state, *drvInfo);
+                    auto drv = Drv(attrPathS, *state, *drvInfo);
                     reply.update(drv);
 
                     /* Register the derivation as a GC root.  !!! This
@@ -388,7 +452,9 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
             printError(e.msg());
         }
 
-        writeLine(to.get(), reply.dump());
+        if (tryWriteLine(to.get(), reply.dump()) < 0) {
+            return; // main process died
+        }
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
@@ -398,7 +464,9 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
             break;
     }
 
-    writeLine(to.get(), "restart");
+    if (tryWriteLine(to.get(), "restart") < 0) {
+        return; // main process died
+    };
 }
 
 typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
@@ -430,10 +498,14 @@ struct Proc {
                     auto msg = e.msg();
                     err["error"] = filterANSIEscapes(msg, true);
                     printError(msg);
-                    writeLine(to->get(), err.dump());
+                    if (tryWriteLine(to->get(), err.dump()) < 0) {
+                        return; // main process died
+                    };
                     // Don't forget to print it into the STDERR log, this is
                     // what's shown in the Hydra UI.
-                    writeLine(to->get(), "restart");
+                    if (tryWriteLine(to->get(), "restart") < 0) {
+                        return; // main process died
+                    }
                 }
             },
             ProcessOptions{.allowVfork = false});
@@ -452,25 +524,69 @@ struct State {
     std::exception_ptr exc;
 };
 
+void handleBrokenWorkerPipe(Proc &proc) {
+    while (1) {
+        int rc = waitpid(proc.pid, nullptr, WNOHANG);
+        if (rc == 0) {
+            proc.pid = -1; // we already took the process status from Proc, no
+                           // need to wait for it again to avoid error messages
+            throw Error("BUG: worker pipe closed but worker still running?");
+        } else if (rc == -1) {
+            proc.pid = -1;
+            throw Error("BUG: waitpid waiting for worker failed: %s",
+                        strerror(errno));
+        } else {
+            if (WIFEXITED(rc)) {
+                proc.pid = -1;
+                throw Error("evaluation worker exited with %d",
+                            WEXITSTATUS(rc));
+            } else if (WIFSIGNALED(rc)) {
+                proc.pid = -1;
+                if (WTERMSIG(rc) == SIGKILL) {
+                    throw Error("evaluation worker killed by SIGKILL, maybe "
+                                "memory limit reached?");
+                }
+                throw Error("evaluation worker killed by signal %d",
+                            WTERMSIG(rc));
+            } // else ignore WIFSTOPPED and WIFCONTINUED
+        }
+    }
+}
+
 std::function<void()> collector(Sync<State> &state_,
                                 std::condition_variable &wakeup) {
     return [&]() {
         try {
             std::optional<std::unique_ptr<Proc>> proc_;
+            std::optional<std::unique_ptr<LineReader>> fromReader_;
 
             while (true) {
-
-                auto proc = proc_.has_value() ? std::move(proc_.value())
-                                              : std::make_unique<Proc>(worker);
+                if (!proc_.has_value()) {
+                    proc_ = std::make_unique<Proc>(worker);
+                    fromReader_ = std::make_unique<LineReader>(
+                        proc_.value()->from.release());
+                }
+                auto proc = std::move(proc_.value());
+                auto fromReader = std::move(fromReader_.value());
 
                 /* Check whether the existing worker process is still there. */
-                auto s = readLine(proc->from.get());
-                if (s == "restart") {
+                auto s = fromReader->readLine();
+                if (s == "") {
+                    handleBrokenWorkerPipe(*proc.get());
+                } else if (s == "restart") {
                     proc_ = std::nullopt;
+                    fromReader_ = std::nullopt;
                     continue;
                 } else if (s != "next") {
-                    auto json = json::parse(s);
-                    throw Error("worker error: %s", (std::string)json["error"]);
+                    try {
+                        auto json = json::parse(s);
+                        throw Error("worker error: %s",
+                                    (std::string)json["error"]);
+                    } catch (const json::exception &e) {
+                        throw Error(
+                            "Received invalid JSON from worker: %s '%s'",
+                            e.what(), s);
+                    }
                 }
 
                 /* Wait for a job name to become available. */
@@ -481,7 +597,9 @@ std::function<void()> collector(Sync<State> &state_,
                     auto state(state_.lock());
                     if ((state->todo.empty() && state->active.empty()) ||
                         state->exc) {
-                        writeLine(proc->to.get(), "exit");
+                        if (tryWriteLine(proc->to.get(), "exit") < 0) {
+                            handleBrokenWorkerPipe(*proc.get());
+                        }
                         return;
                     }
                     if (!state->todo.empty()) {
@@ -494,11 +612,26 @@ std::function<void()> collector(Sync<State> &state_,
                 }
 
                 /* Tell the worker to evaluate it. */
-                writeLine(proc->to.get(), "do " + attrPath.dump());
+                if (tryWriteLine(proc->to.get(), "do " + attrPath.dump()) < 0) {
+                    handleBrokenWorkerPipe(*proc.get());
+                }
 
                 /* Wait for the response. */
-                auto respString = readLine(proc->from.get());
-                auto response = json::parse(respString);
+                auto respString = fromReader->readLine();
+                if (respString == "") {
+                    handleBrokenWorkerPipe(*proc.get());
+                }
+                json response;
+                try {
+                    response = json::parse(respString);
+                    if (response.find("error") != response.end()) {
+                        throw Error("worker error: %s",
+                                    (std::string)response["error"]);
+                    }
+                } catch (const json::exception &e) {
+                    throw Error("Received invalid JSON from worker: %s '%s'",
+                                e.what(), respString);
+                }
 
                 /* Handle the response. */
                 std::vector<json> newAttrs;
@@ -514,6 +647,7 @@ std::function<void()> collector(Sync<State> &state_,
                 }
 
                 proc_ = std::move(proc);
+                fromReader_ = std::move(fromReader);
 
                 /* Add newly discovered job names to the queue. */
                 {
