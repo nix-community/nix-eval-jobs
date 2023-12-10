@@ -1,35 +1,26 @@
 #include <map>
-#include <iostream>
 #include <thread>
+#include <condition_variable>
 #include <filesystem>
-#include <nix/eval-settings.hh>
+
 #include <nix/config.h>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
-#include <nix/eval.hh>
-#include <nix/eval-inline.hh>
-#include <nix/util.hh>
-#include <nix/get-drvs.hh>
-#include <nix/globals.hh>
+#include <nix/eval-settings.hh>
 #include <nix/common-eval-args.hh>
-#include <nix/flake/flakeref.hh>
-#include <nix/flake/flake.hh>
-#include <nix/attr-path.hh>
-#include <nix/derivations.hh>
+#include <nix/args/root.hh>
+#include <nix/shared.hh>
+#include <nix/sync.hh>
+#include <nix/eval.hh>
+#include <nix/get-drvs.hh>
+#include <nix/value-to-json.hh>
 #include <nix/local-fs-store.hh>
-#include <nix/logging.hh>
-#include <nix/error.hh>
-#include <nix/installables.hh>
 #include <nix/signals.hh>
 #include <nix/terminal.hh>
-#include <nix/path-with-outputs.hh>
-#include <nix/installable-flake.hh>
-
-#include <nix/value-to-json.hh>
-
-#include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/resource.h>
+
+#include "eval-args.hh"
+#include "drv.hh"
+#include "buffered-io.hh"
+#include "worker.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -42,435 +33,10 @@ using namespace nlohmann;
 #elif __clang__
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-struct MyArgs : virtual MixEvalArgs, virtual MixCommonArgs, virtual RootArgs {
-    std::string releaseExpr;
-    Path gcRootsDir;
-    bool flake = false;
-    bool fromArgs = false;
-    bool meta = false;
-    bool showTrace = false;
-    bool impure = false;
-    bool forceRecurse = false;
-    bool checkCacheStatus = false;
-    size_t nrWorkers = 1;
-    size_t maxMemorySize = 4096;
-
-    // usually in MixFlakeOptions
-    flake::LockFlags lockFlags = {.updateLockFile = false,
-                                  .writeLockFile = false,
-                                  .useRegistries = false,
-                                  .allowUnlocked = false};
-
-    MyArgs() : MixCommonArgs("nix-eval-jobs") {
-        addFlag({
-            .longName = "help",
-            .description = "show usage information",
-            .handler = {[&]() {
-                printf("USAGE: nix-eval-jobs [options] expr\n\n");
-                for (const auto &[name, flag] : longFlags) {
-                    if (hiddenCategories.count(flag->category)) {
-                        continue;
-                    }
-                    printf("  --%-20s %s\n", name.c_str(),
-                           flag->description.c_str());
-                }
-                ::exit(0);
-            }},
-        });
-
-        addFlag({.longName = "impure",
-                 .description = "allow impure expressions",
-                 .handler = {&impure, true}});
-
-        addFlag(
-            {.longName = "force-recurse",
-             .description = "force recursion (don't respect recurseIntoAttrs)",
-             .handler = {&forceRecurse, true}});
-
-        addFlag({.longName = "gc-roots-dir",
-                 .description = "garbage collector roots directory",
-                 .labels = {"path"},
-                 .handler = {&gcRootsDir}});
-
-        addFlag({.longName = "workers",
-                 .description = "number of evaluate workers",
-                 .labels = {"workers"},
-                 .handler = {
-                     [=, this](std::string s) { nrWorkers = std::stoi(s); }}});
-
-        addFlag({.longName = "max-memory-size",
-                 .description = "maximum evaluation memory size in megabyte "
-                                "(4GiB per worker by default)",
-                 .labels = {"size"},
-                 .handler = {[=, this](std::string s) {
-                     maxMemorySize = std::stoi(s);
-                 }}});
-
-        addFlag({.longName = "flake",
-                 .description = "build a flake",
-                 .handler = {&flake, true}});
-
-        addFlag({.longName = "meta",
-                 .description = "include derivation meta field in output",
-                 .handler = {&meta, true}});
-
-        addFlag(
-            {.longName = "check-cache-status",
-             .description =
-                 "Check if the derivations are present locally or in "
-                 "any configured substituters (i.e. binary cache). The "
-                 "information "
-                 "will be exposed in the `isCached` field of the JSON output.",
-             .handler = {&checkCacheStatus, true}});
-
-        addFlag({.longName = "show-trace",
-                 .description =
-                     "print out a stack trace in case of evaluation errors",
-                 .handler = {&showTrace, true}});
-
-        addFlag({.longName = "expr",
-                 .shortName = 'E',
-                 .description = "treat the argument as a Nix expression",
-                 .handler = {&fromArgs, true}});
-
-        // usually in MixFlakeOptions
-        addFlag({
-            .longName = "override-input",
-            .description =
-                "Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
-            .category = category,
-            .labels = {"input-path", "flake-url"},
-            .handler = {[&](std::string inputPath, std::string flakeRef) {
-                // overriden inputs are unlocked
-                lockFlags.allowUnlocked = true;
-                lockFlags.inputOverrides.insert_or_assign(
-                    flake::parseInputPath(inputPath),
-                    parseFlakeRef(flakeRef, absPath("."), true));
-            }},
-        });
-
-        expectArg("expr", &releaseExpr);
-    }
-};
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
-#elif __clang__
-#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
-#endif
-
 static MyArgs myArgs;
 
-static Value *releaseExprTopLevelValue(EvalState &state, Bindings &autoArgs) {
-    Value vTop;
-
-    if (myArgs.fromArgs) {
-        Expr *e = state.parseExprFromString(
-            myArgs.releaseExpr, state.rootPath(CanonPath::fromCwd()));
-        state.eval(e, vTop);
-    } else {
-        state.evalFile(lookupFileArg(state, myArgs.releaseExpr), vTop);
-    }
-
-    auto vRoot = state.allocValue();
-
-    state.autoCallFunction(autoArgs, vTop, *vRoot);
-
-    return vRoot;
-}
-
-bool queryIsCached(Store &store, std::map<std::string, std::string> &outputs) {
-    uint64_t downloadSize, narSize;
-    StorePathSet willBuild, willSubstitute, unknown;
-
-    std::vector<StorePathWithOutputs> paths;
-    for (auto const &[key, val] : outputs) {
-        paths.push_back(followLinksToStorePathWithOutputs(store, val));
-    }
-
-    store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
-                       unknown, downloadSize, narSize);
-    return willBuild.empty() && unknown.empty();
-}
-
-/* The fields of a derivation that are printed in json form */
-struct Drv {
-    std::string name;
-    std::string system;
-    std::string drvPath;
-    bool isCached;
-    std::map<std::string, std::string> outputs;
-    std::map<std::string, std::set<std::string>> inputDrvs;
-    std::optional<nlohmann::json> meta;
-
-    Drv(std::string &attrPath, EvalState &state, DrvInfo &drvInfo) {
-
-        auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
-
-        try {
-            for (auto out : drvInfo.queryOutputs(true)) {
-                if (out.second)
-                    outputs[out.first] =
-                        localStore->printStorePath(*out.second);
-            }
-        } catch (const std::exception &e) {
-            throw EvalError("derivation '%s' does not have valid outputs: %s",
-                            attrPath, e.what());
-        }
-
-        if (myArgs.meta) {
-            nlohmann::json meta_;
-            for (auto &metaName : drvInfo.queryMetaNames()) {
-                NixStringContext context;
-                std::stringstream ss;
-
-                auto metaValue = drvInfo.queryMeta(metaName);
-                // Skip non-serialisable types
-                // TODO: Fix serialisation of derivations to store paths
-                if (metaValue == 0) {
-                    continue;
-                }
-
-                printValueAsJSON(state, true, *metaValue, noPos, ss, context);
-
-                meta_[metaName] = nlohmann::json::parse(ss.str());
-            }
-            meta = meta_;
-        }
-        if (myArgs.checkCacheStatus) {
-            isCached = queryIsCached(*localStore, outputs);
-        }
-
-        drvPath = localStore->printStorePath(drvInfo.requireDrvPath());
-
-        auto drv = localStore->readDerivation(drvInfo.requireDrvPath());
-        for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
-            std::set<std::string> inputDrvOutputs;
-            for (auto &outputName : inputNode.value) {
-                inputDrvOutputs.insert(outputName);
-            }
-            inputDrvs[localStore->printStorePath(inputDrvPath)] =
-                inputDrvOutputs;
-        }
-        name = drvInfo.queryName();
-        system = drv.platform;
-    }
-};
-
-static void to_json(nlohmann::json &json, const Drv &drv) {
-    json = nlohmann::json{{"name", drv.name},
-                          {"system", drv.system},
-                          {"drvPath", drv.drvPath},
-                          {"outputs", drv.outputs},
-                          {"inputDrvs", drv.inputDrvs}};
-
-    if (drv.meta.has_value()) {
-        json["meta"] = drv.meta.value();
-    }
-
-    if (myArgs.checkCacheStatus) {
-        json["isCached"] = drv.isCached;
-    }
-}
-
-std::string attrPathJoin(json input) {
-    return std::accumulate(input.begin(), input.end(), std::string(),
-                           [](std::string ss, std::string s) {
-                               // Escape token if containing dots
-                               if (s.find(".") != std::string::npos) {
-                                   s = "\"" + s + "\"";
-                               }
-                               return ss.empty() ? s : ss + "." + s;
-                           });
-}
-
-[[nodiscard]] static int tryWriteLine(int fd, std::string s) {
-    s += "\n";
-    std::string_view sv{s};
-    while (!sv.empty()) {
-        checkInterrupt();
-        ssize_t res = write(fd, sv.data(), sv.size());
-        if (res == -1 && errno != EINTR) {
-            return -errno;
-        }
-        if (res > 0) {
-            sv.remove_prefix(res);
-        }
-    }
-    return 0;
-}
-
-class LineReader {
-  public:
-    LineReader(int fd) {
-        stream = fdopen(fd, "r");
-        if (!stream) {
-            throw Error("fdopen failed: %s", strerror(errno));
-        }
-    }
-
-    ~LineReader() {
-        fclose(stream);
-        free(buffer);
-    }
-
-    LineReader(LineReader &&other) {
-        stream = other.stream;
-        other.stream = nullptr;
-        buffer = other.buffer;
-        other.buffer = nullptr;
-        len = other.len;
-        other.len = 0;
-    }
-
-    [[nodiscard]] std::string_view readLine() {
-        ssize_t read = getline(&buffer, &len, stream);
-
-        if (read == -1) {
-            return {}; // Return an empty string_view in case of error
-        }
-
-        // Remove trailing newline
-        return std::string_view(buffer, read - 1);
-    }
-
-  private:
-    FILE *stream = nullptr;
-    char *buffer = nullptr;
-    size_t len = 0;
-};
-
-static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
-                   AutoCloseFD &from) {
-
-    nix::Value *vRoot = [&]() {
-        if (myArgs.flake) {
-            auto [flakeRef, fragment, outputSpec] =
-                parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-                    myArgs.releaseExpr, absPath("."));
-            InstallableFlake flake{
-                {}, state, std::move(flakeRef), fragment, outputSpec,
-                {}, {},    myArgs.lockFlags};
-
-            return flake.toValue(*state).first;
-        } else {
-            return releaseExprTopLevelValue(*state, autoArgs);
-        }
-    }();
-
-    LineReader fromReader(from.release());
-
-    while (true) {
-        /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(to.get(), "next") < 0) {
-            return; // main process died
-        }
-
-        auto s = fromReader.readLine();
-        if (s == "exit") {
-            break;
-        }
-        if (!hasPrefix(s, "do ")) {
-            fprintf(stderr, "worker error: received invalid command '%s'\n",
-                    s.data());
-            abort();
-        }
-        auto path = json::parse(s.substr(3));
-        auto attrPathS = attrPathJoin(path);
-
-        debug("worker process %d at '%s'", getpid(), path);
-
-        /* Evaluate it and send info back to the collector. */
-        json reply = json{{"attr", attrPathS}, {"attrPath", path}};
-        try {
-            auto vTmp =
-                findAlongAttrPath(*state, attrPathS, autoArgs, *vRoot).first;
-
-            auto v = state->allocValue();
-            state->autoCallFunction(autoArgs, *vTmp, *v);
-
-            if (v->type() == nAttrs) {
-                if (auto drvInfo = getDerivation(*state, *v, false)) {
-                    auto drv = Drv(attrPathS, *state, *drvInfo);
-                    reply.update(drv);
-
-                    /* Register the derivation as a GC root.  !!! This
-                       registers roots for jobs that we may have already
-                       done. */
-                    if (myArgs.gcRootsDir != "") {
-                        Path root = myArgs.gcRootsDir + "/" +
-                                    std::string(baseNameOf(drv.drvPath));
-                        if (!pathExists(root)) {
-                            auto localStore =
-                                state->store
-                                    .dynamic_pointer_cast<LocalFSStore>();
-                            auto storePath =
-                                localStore->parseStorePath(drv.drvPath);
-                            localStore->addPermRoot(storePath, root);
-                        }
-                    }
-                } else {
-                    auto attrs = nlohmann::json::array();
-                    bool recurse =
-                        myArgs.forceRecurse ||
-                        path.size() == 0; // Dont require `recurseForDerivations
-                                          // = true;` for top-level attrset
-
-                    for (auto &i :
-                         v->attrs->lexicographicOrder(state->symbols)) {
-                        const std::string &name = state->symbols[i->name];
-                        attrs.push_back(name);
-
-                        if (name == "recurseForDerivations" &&
-                            !myArgs.forceRecurse) {
-                            auto attrv =
-                                v->attrs->get(state->sRecurseForDerivations);
-                            recurse = state->forceBool(
-                                *attrv->value, attrv->pos,
-                                "while evaluating recurseForDerivations");
-                        }
-                    }
-                    if (recurse)
-                        reply["attrs"] = std::move(attrs);
-                    else
-                        reply["attrs"] = nlohmann::json::array();
-                }
-            } else {
-                // We ignore everything that cannot be build
-                reply["attrs"] = nlohmann::json::array();
-            }
-        } catch (EvalError &e) {
-            auto err = e.info();
-            std::ostringstream oss;
-            showErrorInfo(oss, err, loggerSettings.showTrace.get());
-            auto msg = oss.str();
-
-            // Transmits the error we got from the previous evaluation
-            // in the JSON output.
-            reply["error"] = filterANSIEscapes(msg, true);
-            // Don't forget to print it into the STDERR log, this is
-            // what's shown in the Hydra UI.
-            printError(e.msg());
-        }
-
-        if (tryWriteLine(to.get(), reply.dump()) < 0) {
-            return; // main process died
-        }
-
-        /* If our RSS exceeds the maximum, exit. The collector will
-           start a new process. */
-        struct rusage r;
-        getrusage(RUSAGE_SELF, &r);
-        if ((size_t)r.ru_maxrss > myArgs.maxMemorySize * 1024)
-            break;
-    }
-
-    if (tryWriteLine(to.get(), "restart") < 0) {
-        return; // main process died
-    };
-}
-
 typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
-                           AutoCloseFD &to, AutoCloseFD &from)>
+                           AutoCloseFD &to, AutoCloseFD &from, MyArgs &args)>
     Processor;
 
 /* Auto-cleanup of fork's process and fds. */
@@ -492,11 +58,11 @@ struct Proc {
                     auto state = std::make_shared<EvalState>(
                         myArgs.searchPath, openStore(*myArgs.evalStoreUrl));
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    proc(ref<EvalState>(state), autoArgs, *to, *from);
+                    proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);
                 } catch (Error &e) {
                     nlohmann::json err;
                     auto msg = e.msg();
-                    err["error"] = filterANSIEscapes(msg, true);
+                    err["error"] = nix::filterANSIEscapes(msg, true);
                     printError(msg);
                     if (tryWriteLine(to->get(), err.dump()) < 0) {
                         return; // main process died
@@ -624,10 +190,6 @@ std::function<void()> collector(Sync<State> &state_,
                 json response;
                 try {
                     response = json::parse(respString);
-                    if (response.find("error") != response.end()) {
-                        throw Error("worker error: %s",
-                                    (std::string)response["error"]);
-                    }
                 } catch (const json::exception &e) {
                     throw Error("Received invalid JSON from worker: %s '%s'",
                                 e.what(), respString);
@@ -679,7 +241,7 @@ int main(int argc, char **argv) {
         initNix();
         initGC();
 
-        myArgs.parseCmdline(argvToStrings(argc, argv), 0);
+        myArgs.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
          * causing "unexpected EOF" during eval */
