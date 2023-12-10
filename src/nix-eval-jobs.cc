@@ -27,14 +27,6 @@
 using namespace nix;
 using namespace nlohmann;
 
-// Safe to ignore - the args will be static.
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
-#elif __clang__
-#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
-#endif
-static MyArgs myArgs;
-
 typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
                            AutoCloseFD &to, AutoCloseFD &from, MyArgs &args)>
     Processor;
@@ -44,7 +36,7 @@ struct Proc {
     AutoCloseFD to, from;
     Pid pid;
 
-    Proc(const Processor &proc) {
+    Proc(const Processor &proc, MyArgs &args) {
         Pipe toPipe, fromPipe;
         toPipe.create();
         fromPipe.create();
@@ -56,9 +48,9 @@ struct Proc {
                 debug("created worker process %d", getpid());
                 try {
                     auto state = std::make_shared<EvalState>(
-                        myArgs.searchPath, openStore(*myArgs.evalStoreUrl));
-                    Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);
+                        args.searchPath, openStore(*args.evalStoreUrl));
+                    Bindings &autoArgs = *args.getAutoArgs(*state);
+                    proc(ref<EvalState>(state), autoArgs, *to, *from, args);
                 } catch (Error &e) {
                     nlohmann::json err;
                     auto msg = e.msg();
@@ -119,8 +111,7 @@ void handleBrokenWorkerPipe(Proc &proc) {
     }
 }
 
-std::function<void()> collector(Sync<State> &state_,
-                                std::condition_variable &wakeup) {
+std::function<void()> collector(Sync<State> &state_, std::condition_variable &wakeup, MyArgs &args) {
     return [&]() {
         try {
             std::optional<std::unique_ptr<Proc>> proc_;
@@ -128,7 +119,7 @@ std::function<void()> collector(Sync<State> &state_,
 
             while (true) {
                 if (!proc_.has_value()) {
-                    proc_ = std::make_unique<Proc>(worker);
+                    proc_ = std::make_unique<Proc>(worker, args);
                     fromReader_ = std::make_unique<LineReader>(
                         proc_.value()->from.release());
                 }
@@ -241,7 +232,8 @@ int main(int argc, char **argv) {
         initNix();
         initGC();
 
-        myArgs.parseArgs(argv, argc);
+        MyArgs args;
+        args.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
          * causing "unexpected EOF" during eval */
@@ -253,22 +245,22 @@ int main(int argc, char **argv) {
 
         /* When building a flake, use pure evaluation (no access to
            'getEnv', 'currentSystem' etc. */
-        if (myArgs.impure) {
+        if (args.impure) {
             evalSettings.pureEval = false;
-        } else if (myArgs.flake) {
+        } else if (args.flake) {
             evalSettings.pureEval = true;
         }
 
-        if (myArgs.releaseExpr == "")
+        if (args.releaseExpr == "")
             throw UsageError("no expression specified");
 
-        if (myArgs.gcRootsDir == "") {
+        if (args.gcRootsDir == "") {
             printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
         } else {
-            myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
+            args.gcRootsDir = std::filesystem::absolute(args.gcRootsDir);
         }
 
-        if (myArgs.showTrace) {
+        if (args.showTrace) {
             loggerSettings.showTrace.assign(true);
         }
 
@@ -277,8 +269,9 @@ int main(int argc, char **argv) {
         /* Start a collector thread per worker process. */
         std::vector<std::thread> threads;
         std::condition_variable wakeup;
-        for (size_t i = 0; i < myArgs.nrWorkers; i++)
-            threads.emplace_back(std::thread(collector(state_, wakeup)));
+        for (size_t i = 0; i < args.nrWorkers; i++) {
+            threads.emplace_back(std::thread(collector(state_, wakeup, args)));
+        }
 
         for (auto &thread : threads)
             thread.join();
