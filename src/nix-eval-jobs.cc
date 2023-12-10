@@ -202,7 +202,7 @@ struct Drv {
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;
 
-    Drv(EvalState &state, DrvInfo &drvInfo) {
+    Drv(std::string &attrPath, EvalState &state, DrvInfo &drvInfo) {
 
         auto localStore = state.store.dynamic_pointer_cast<LocalFSStore>();
 
@@ -213,7 +213,8 @@ struct Drv {
                         localStore->printStorePath(*out.second);
             }
         } catch (const std::exception &e) {
-            throw EvalError("derivation must have valid outputs: %s", e.what());
+            throw EvalError("derivation '%s' does not have valid outputs: %s",
+                            attrPath, e.what());
         }
 
         if (myArgs.meta) {
@@ -389,7 +390,7 @@ static void worker(ref<EvalState> state, Bindings &autoArgs, AutoCloseFD &to,
 
             if (v->type() == nAttrs) {
                 if (auto drvInfo = getDerivation(*state, *v, false)) {
-                    auto drv = Drv(*state, *drvInfo);
+                    auto drv = Drv(attrPathS, *state, *drvInfo);
                     reply.update(drv);
 
                     /* Register the derivation as a GC root.  !!! This
