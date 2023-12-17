@@ -1,29 +1,48 @@
-#include <map>
-#include <sys/signal.h>
-#include <thread>
-#include <condition_variable>
-#include <filesystem>
+#include <nix/config.h> // IWYU pragma: keep
 
-#include <nix/config.h>
 #include <nix/eval-settings.hh>
-#include <nix/common-eval-args.hh>
-#include <nix/args/root.hh>
 #include <nix/shared.hh>
 #include <nix/sync.hh>
 #include <nix/eval.hh>
-#include <nix/get-drvs.hh>
-#include <nix/value-to-json.hh>
-#include <nix/local-fs-store.hh>
 #include <nix/signals.hh>
 #include <nix/terminal.hh>
 #include <sys/wait.h>
+#include <nlohmann/json.hpp>
+#include <errno.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <nix/attr-set.hh>
+#include <nix/config.hh>
+#include <nix/error.hh>
+#include <nix/file-descriptor.hh>
+#include <nix/globals.hh>
+#include <nix/logging.hh>
+#include <nlohmann/detail/iterators/iter_impl.hpp>
+#include <nlohmann/detail/json_ref.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <nix/processes.hh>
+#include <nix/ref.hh>
+#include <nix/store-api.hh>
+#include <map>
+#include <thread>
+#include <condition_variable>
+#include <filesystem>
+#include <exception>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "eval-args.hh"
-#include "drv.hh"
 #include "buffered-io.hh"
 #include "worker.hh"
-
-#include <nlohmann/json.hpp>
 
 using namespace nix;
 using namespace nlohmann;
@@ -85,33 +104,74 @@ struct State {
     std::exception_ptr exc;
 };
 
-void handleBrokenWorkerPipe(Proc &proc) {
+void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
     pid_t pid = proc.pid.release();
     while (1) {
-        int rc = waitpid(pid, nullptr, WNOHANG);
+        int status;
+        int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
             kill(pid, SIGKILL);
-            throw Error("BUG: worker pipe closed but worker still running?");
+            throw Error("BUG: while %s, worker pipe got closed but evaluation "
+                        "worker still running?",
+                        msg);
         } else if (rc == -1) {
             kill(pid, SIGKILL);
-            throw Error("BUG: waitpid waiting for worker failed: %s",
-                        strerror(errno));
+            throw Error(
+                "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
+                strerror(errno));
         } else {
-            if (WIFEXITED(rc)) {
-                throw Error("evaluation worker exited with %d",
-                            WEXITSTATUS(rc));
-            } else if (WIFSIGNALED(rc)) {
-                if (WTERMSIG(rc) == SIGKILL) {
-                    throw Error("evaluation worker killed by SIGKILL, maybe "
-                                "memory limit reached?");
+            if (WIFEXITED(status)) {
+                if (WEXITSTATUS(status) == 1) {
+                    throw Error(
+                        "while %s, evaluation worker exited with exit code 1, "
+                        "(possible infinite recursion)",
+                        msg);
                 }
-                throw Error("evaluation worker killed by signal %d",
-                            WTERMSIG(rc));
+                throw Error("while %s, evaluation worker exited with %d", msg,
+                            WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                switch (WTERMSIG(status)) {
+                case SIGKILL:
+                    throw Error(
+                        "while %s, evaluation worker got killed by SIGKILL, "
+                        "maybe "
+                        "memory limit reached?",
+                        msg);
+                    break;
+#ifdef __APPLE__
+                case SIGBUS:
+                    throw Error(
+                        "while %s, evaluation worker got killed by SIGBUS, "
+                        "(possible infinite recursion)",
+                        msg);
+                    break;
+#else
+                case SIGSEGV:
+                    throw Error(
+                        "while %s, evaluation worker got killed by SIGSEGV, "
+                        "(possible infinite recursion)",
+                        msg);
+#endif
+                }
+                throw Error(
+                    "while %s, evaluation worker got killed by signal %d (%s)",
+                    msg, WTERMSIG(status), strsignal(WTERMSIG(status)));
             } // else ignore WIFSTOPPED and WIFCONTINUED
         }
     }
+}
+
+std::string joinAttrPath(json &attrPath) {
+    std::string joined;
+    for (auto &element : attrPath) {
+        if (!joined.empty()) {
+            joined += '.';
+        }
+        joined += element.get<std::string>();
+    }
+    return joined;
 }
 
 void collector(Sync<State> &state_, std::condition_variable &wakeup) {
@@ -131,7 +191,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
             /* Check whether the existing worker process is still there. */
             auto s = fromReader->readLine();
             if (s.empty()) {
-                handleBrokenWorkerPipe(*proc.get());
+                handleBrokenWorkerPipe(*proc.get(), "checking worker process");
             } else if (s == "restart") {
                 proc_ = std::nullopt;
                 fromReader_ = std::nullopt;
@@ -156,7 +216,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                 if ((state->todo.empty() && state->active.empty()) ||
                     state->exc) {
                     if (tryWriteLine(proc->to.get(), "exit") < 0) {
-                        handleBrokenWorkerPipe(*proc.get());
+                        handleBrokenWorkerPipe(*proc.get(), "sending exit");
                     }
                     return;
                 }
@@ -171,13 +231,16 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
 
             /* Tell the worker to evaluate it. */
             if (tryWriteLine(proc->to.get(), "do " + attrPath.dump()) < 0) {
-                handleBrokenWorkerPipe(*proc.get());
+                auto msg = "sending attrPath '" + joinAttrPath(attrPath) + "'";
+                handleBrokenWorkerPipe(*proc.get(), msg);
             }
 
             /* Wait for the response. */
             auto respString = fromReader->readLine();
             if (respString.empty()) {
-                handleBrokenWorkerPipe(*proc.get());
+                auto msg = "reading result for attrPath '" +
+                           joinAttrPath(attrPath) + "'";
+                handleBrokenWorkerPipe(*proc.get(), msg);
             }
             json response;
             try {

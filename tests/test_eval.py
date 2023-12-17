@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import subprocess
 import json
-from tempfile import TemporaryDirectory
+import subprocess
+import pytest
 from pathlib import Path
-from typing import List, Dict, Any
+from tempfile import TemporaryDirectory
+from typing import Any, Dict, List
 
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
@@ -77,8 +78,10 @@ def test_eval_error() -> None:
             "--gc-roots-dir",
             tempdir,
             "--meta",
+            "--workers",
+            "1",
             "--flake",
-            ".#legacyPackages.x86_64-linux",
+            ".#legacyPackages.x86_64-linux.brokenPkgs",
         ]
         res = subprocess.run(
             cmd,
@@ -86,6 +89,32 @@ def test_eval_error() -> None:
             text=True,
             stdout=subprocess.PIPE,
         )
+        print(res.stdout)
         attrs = json.loads(res.stdout)
         assert attrs["attr"] == "brokenPackage"
         assert "this is an evaluation error" in attrs["error"]
+
+
+@pytest.mark.infiniterecursion
+def test_recursion_error() -> None:
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--workers",
+            "1",
+            "--flake",
+            ".#legacyPackages.x86_64-linux.infiniteRecursionPkgs",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            stderr=subprocess.PIPE,
+        )
+        assert res.returncode == 1
+        print(res.stderr)
+        assert "packageWithInfiniteRecursion" in res.stderr
+        assert "possible infinite recursion" in res.stderr
