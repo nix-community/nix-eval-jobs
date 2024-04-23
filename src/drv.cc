@@ -5,6 +5,7 @@
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
 #include <nix/derivations.hh>
+#include <nix/get-drvs.hh>
 #include <stdint.h>
 #include <nix/derived-path-map.hh>
 #include <nix/eval.hh>
@@ -15,7 +16,6 @@
 #include <nix/ref.hh>
 #include <nix/value/context.hh>
 #include <exception>
-#include <memory>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -39,28 +39,31 @@ static bool queryIsCached(nix::Store &store,
 }
 
 /* The fields of a derivation that are printed in json form */
-Drv::Drv(std::string &attrPath, nix::EvalState &state, nix::DrvInfo &drvInfo,
-         MyArgs &args) {
+Drv::Drv(std::string &attrPath, nix::EvalState &state,
+         nix::PackageInfo &packageInfo, MyArgs &args) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
 
     try {
-        for (auto out : drvInfo.queryOutputs(true)) {
+        for (auto out : packageInfo.queryOutputs(true)) {
             if (out.second)
                 outputs[out.first] = localStore->printStorePath(*out.second);
         }
     } catch (const std::exception &e) {
-        throw nix::EvalError("derivation '%s' does not have valid outputs: %s",
-                             attrPath, e.what());
+        state
+            .error<nix::EvalError>(
+                "derivation '%s' does not have valid outputs: %s", attrPath,
+                e.what())
+            .debugThrow();
     }
 
     if (args.meta) {
         nlohmann::json meta_;
-        for (auto &metaName : drvInfo.queryMetaNames()) {
+        for (auto &metaName : packageInfo.queryMetaNames()) {
             nix::NixStringContext context;
             std::stringstream ss;
 
-            auto metaValue = drvInfo.queryMeta(metaName);
+            auto metaValue = packageInfo.queryMeta(metaName);
             // Skip non-serialisable types
             // TODO: Fix serialisation of derivations to store paths
             if (metaValue == 0) {
@@ -82,9 +85,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state, nix::DrvInfo &drvInfo,
         cacheStatus = Drv::CacheStatus::Unknown;
     }
 
-    drvPath = localStore->printStorePath(drvInfo.requireDrvPath());
+    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
 
-    auto drv = localStore->readDerivation(drvInfo.requireDrvPath());
+    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
     for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
         std::set<std::string> inputDrvOutputs;
         for (auto &outputName : inputNode.value) {
@@ -92,7 +95,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state, nix::DrvInfo &drvInfo,
         }
         inputDrvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
     }
-    name = drvInfo.queryName();
+    name = packageInfo.queryName();
     system = drv.platform;
 }
 
