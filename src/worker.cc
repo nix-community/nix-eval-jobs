@@ -54,8 +54,8 @@ static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
     nix::Value vTop;
 
     if (args.fromArgs) {
-        nix::Expr *e = state.parseExprFromString(
-            args.releaseExpr, state.rootPath(nix::CanonPath::fromCwd()));
+        nix::Expr *e =
+            state.parseExprFromString(args.releaseExpr, state.rootPath("."));
         state.eval(e, vTop);
     } else {
         state.evalFile(lookupFileArg(state, args.releaseExpr), vTop);
@@ -129,8 +129,9 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             state->autoCallFunction(autoArgs, *vTmp, *v);
 
             if (v->type() == nix::nAttrs) {
-                if (auto drvInfo = nix::getDerivation(*state, *v, false)) {
-                    auto drv = Drv(attrPathS, *state, *drvInfo, args);
+                auto packageInfo = nix::getDerivation(*state, *v, false);
+                if (packageInfo) {
+                    auto drv = Drv(attrPathS, *state, *packageInfo, args);
                     reply.update(drv);
 
                     /* Register the derivation as a GC root.  !!! This

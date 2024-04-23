@@ -14,7 +14,7 @@ class MyArgs;
 
 namespace nix {
 class EvalState;
-struct DrvInfo;
+struct PackageInfo;
 }  // namespace nix
 
 /* The fields of a derivation that are printed in json form */
@@ -28,6 +28,6 @@ struct Drv {
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;
 
-    Drv(std::string &attrPath, nix::EvalState &state, nix::DrvInfo &drvInfo, MyArgs &args);
+    Drv(std::string &attrPath, nix::EvalState &state, nix::PackageInfo &packageInfo, MyArgs &args);
 };
 void to_json(nlohmann::json &json, const Drv &drv);
