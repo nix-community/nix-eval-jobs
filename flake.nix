@@ -31,7 +31,7 @@
           let
             drvArgs = {
               srcDir = self;
-              nix = if nixVersion == "unstable" then pkgs.nixUnstable else pkgs.nixVersions."nix_${nixVersion}";
+              nix = if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
             };
           in
           {
