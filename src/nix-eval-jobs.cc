@@ -72,7 +72,7 @@ struct Proc {
                     auto evalStore = myArgs.evalStoreUrl
                                          ? openStore(*myArgs.evalStoreUrl)
                                          : openStore();
-                    auto state = std::make_shared<EvalState>(myArgs.searchPath,
+                    auto state = std::make_shared<EvalState>(myArgs.lookupPath,
                                                              evalStore);
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
                     proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);

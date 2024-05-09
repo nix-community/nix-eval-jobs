@@ -158,14 +158,14 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                                           // = true;` for top-level attrset
 
                     for (auto &i :
-                         v->attrs->lexicographicOrder(state->symbols)) {
+                         v->attrs()->lexicographicOrder(state->symbols)) {
                         const std::string &name = state->symbols[i->name];
                         attrs.push_back(name);
 
                         if (name == "recurseForDerivations" &&
                             !args.forceRecurse) {
                             auto attrv =
-                                v->attrs->get(state->sRecurseForDerivations);
+                                v->attrs()->get(state->sRecurseForDerivations);
                             recurse = state->forceBool(
                                 *attrv->value, attrv->pos,
                                 "while evaluating recurseForDerivations");
