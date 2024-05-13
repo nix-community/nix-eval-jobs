@@ -45,7 +45,7 @@ USAGE: nix-eval-jobs [options] expr
 
   --arg                  Pass the value *expr* as the argument *name* to Nix functions.
   --argstr               Pass the string *string* as the argument *name* to Nix functions.
-  --check-cache-status   Check if the derivations are present locally or in any configured substituters (i.e. binary cache). The information will be exposed in the `isCached` field of the JSON output.
+  --check-cache-status   Check if the derivations are present locally or in any configured substituters (i.e. binary cache). The information will be exposed in the `cacheStatus` field of the JSON output.
   --debug                Set the logging verbosity level to 'debug'.
   --eval-store
             The [URL of the Nix store](@docroot@/command-ref/new-cli/nix3-help-stores.md#store-url-format)
@@ -112,8 +112,14 @@ latest release branch.
 
 ### How can I check if my package already have been uploaded in the binary cache?
 
-If you provide the `--check-cache-status`, the json will contain a `"isCached"`
-key in its json, that is true or false based on the status.
+If you provide the `--check-cache-status`, the json will contain a
+`"cacheStatus"` key in its json, with the following values:
+
+| Value    | Meaning                                                 |
+| -------- | ------------------------------------------------------- |
+| local    | Package is present locally                              |
+| cached   | Package is present in the binary cache, but not locally |
+| notBuild | Package needs to be build.                              |
 
 ### How can I evaluate nixpkgs?
 

@@ -23,8 +23,9 @@
 #include "drv.hh"
 #include "eval-args.hh"
 
-static bool queryIsCached(nix::Store &store,
-                          std::map<std::string, std::string> &outputs) {
+static Drv::CacheStatus
+queryCacheStatus(nix::Store &store,
+                 std::map<std::string, std::string> &outputs) {
     uint64_t downloadSize, narSize;
     nix::StorePathSet willBuild, willSubstitute, unknown;
 
@@ -35,7 +36,13 @@ static bool queryIsCached(nix::Store &store,
 
     store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
                        unknown, downloadSize, narSize);
-    return willBuild.empty() && unknown.empty();
+    if (willBuild.empty() && unknown.empty()) {
+        return Drv::CacheStatus::NotBuild;
+    } else if (willSubstitute.empty()) {
+        return Drv::CacheStatus::Local;
+    } else {
+        return Drv::CacheStatus::Cached;
+    }
 }
 
 /* The fields of a derivation that are printed in json form */
@@ -78,9 +85,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         meta = meta_;
     }
     if (args.checkCacheStatus) {
-        cacheStatus = queryIsCached(*localStore, outputs)
-                          ? Drv::CacheStatus::Cached
-                          : Drv::CacheStatus::Uncached;
+        cacheStatus = queryCacheStatus(*localStore, outputs);
     } else {
         cacheStatus = Drv::CacheStatus::Unknown;
     }
@@ -111,6 +116,13 @@ void to_json(nlohmann::json &json, const Drv &drv) {
     }
 
     if (drv.cacheStatus != Drv::CacheStatus::Unknown) {
-        json["isCached"] = drv.cacheStatus == Drv::CacheStatus::Cached;
+        // Deprecated field
+        json["isCached"] = drv.cacheStatus == Drv::CacheStatus::Cached ||
+                           drv.cacheStatus == Drv::CacheStatus::Local;
+
+        json["cacheStatus"] =
+            drv.cacheStatus == Drv::CacheStatus::Cached  ? "cached"
+            : drv.cacheStatus == Drv::CacheStatus::Local ? "local"
+                                                         : "notBuild";
     }
 }
