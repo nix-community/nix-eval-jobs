@@ -51,7 +51,8 @@ def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
 def test_flake() -> None:
     results = common_test(["--flake", ".#hydraJobs"])
     for result in results:
-        assert "isCached" not in result
+        assert "isCached" not in result  # legacy
+        assert "cacheStatus" not in result
 
 
 def test_query_cache_status() -> None:
@@ -59,13 +60,15 @@ def test_query_cache_status() -> None:
     # FIXME in the nix sandbox we cannot query binary caches
     # this would need some local one
     for result in results:
-        assert "isCached" in result
+        assert "isCached" in result  # legacy
+        assert "cacheStatus" in result
 
 
 def test_expression() -> None:
     results = common_test(["ci.nix"])
     for result in results:
-        assert "isCached" not in result
+        assert "isCached" not in result  # legacy
+        assert "cacheStatus" not in result
 
     with open(TEST_ROOT.joinpath("assets/ci.nix"), "r") as ci_nix:
         common_test(["-E", ci_nix.read()])

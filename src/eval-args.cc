@@ -63,13 +63,14 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
              .description = "include derivation meta field in output",
              .handler = {&meta, true}});
 
-    addFlag({.longName = "check-cache-status",
-             .description =
-                 "Check if the derivations are present locally or in "
-                 "any configured substituters (i.e. binary cache). The "
-                 "information "
-                 "will be exposed in the `isCached` field of the JSON output.",
-             .handler = {&checkCacheStatus, true}});
+    addFlag(
+        {.longName = "check-cache-status",
+         .description =
+             "Check if the derivations are present locally or in "
+             "any configured substituters (i.e. binary cache). The "
+             "information "
+             "will be exposed in the `cacheStatus` field of the JSON output.",
+         .handler = {&checkCacheStatus, true}});
 
     addFlag(
         {.longName = "show-trace",
