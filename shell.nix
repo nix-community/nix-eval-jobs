@@ -10,17 +10,18 @@
     in
     import nixpkgs { }
   )
+, stdenv ? pkgs.stdenv
+, lib ? pkgs.lib
 , srcDir ? null
 , nix
 }:
 
 let
-  inherit (pkgs) lib stdenv;
   nix-eval-jobs = pkgs.callPackage ./default.nix {
     inherit srcDir nix;
   };
 in
-pkgs.mkShell {
+(pkgs.mkShell.override { inherit stdenv; }) {
   inherit (nix-eval-jobs) buildInputs;
   nativeBuildInputs = nix-eval-jobs.nativeBuildInputs ++ [
     (pkgs.python3.withPackages (ps: [
