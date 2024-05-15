@@ -3,6 +3,7 @@ project('nix-eval-jobs', 'cpp',
   license : 'GPL-3.0',
 )
 
+libcurl_dep = dependency('libcurl', required: true)
 nix_main_dep = dependency('nix-main', required: true)
 nix_store_dep = dependency('nix-store', required: true)
 nix_expr_dep = dependency('nix-expr', required: true)
