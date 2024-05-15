@@ -40,6 +40,7 @@
             packages.clangStdenv-nix-eval-jobs = pkgs.callPackage ./default.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
             packages.default = self'.packages.nix-eval-jobs;
             devShells.default = pkgs.callPackage ./shell.nix drvArgs;
+            devShells.clang = pkgs.callPackage ./shell.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
 
             checks = builtins.removeAttrs self'.packages [ "default" ] // {
               shell = self'.devShells.default;
