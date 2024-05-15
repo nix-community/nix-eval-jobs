@@ -4,7 +4,7 @@
 
 {
   builtJob = pkgs.writeText "job1" "job1";
-  substitutedJob = pkgs.hello;
+  substitutedJob = pkgs.nix;
 
   dontRecurse = {
     # This shouldn't build as `recurseForDerivations = true;` is not set
@@ -30,6 +30,5 @@
     };
   };
 
-  "dotted.attr" = pkgs.hello;
-
+  "dotted.attr" = pkgs.nix;
 }
