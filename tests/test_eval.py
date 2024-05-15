@@ -43,7 +43,7 @@ def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
 
         substituted_job = results[3]
         assert substituted_job["attr"] == "substitutedJob"
-        assert substituted_job["name"].startswith("hello-")
+        assert substituted_job["name"].startswith("nix-")
         assert substituted_job["meta"]["broken"] is False
         return results
 
