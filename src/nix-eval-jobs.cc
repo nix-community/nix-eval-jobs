@@ -178,6 +178,9 @@ std::string joinAttrPath(json &attrPath) {
 }
 
 void collector(Sync<State> &state_, std::condition_variable &wakeup) {
+    struct GC_stack_base sb;
+    GC_get_stack_base(&sb);
+    GC_register_my_thread(&sb);
     try {
         std::optional<std::unique_ptr<Proc>> proc_;
         std::optional<std::unique_ptr<LineReader>> fromReader_;
@@ -285,6 +288,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
         state->exc = std::current_exception();
         wakeup.notify_all();
     }
+    GC_unregister_my_thread();
 }
 
 int main(int argc, char **argv) {
@@ -292,9 +296,6 @@ int main(int argc, char **argv) {
     /* Prevent undeclared dependencies in the evaluation via
        $NIX_PATH. */
     unsetenv("NIX_PATH");
-
-    /* We are doing the garbage collection by killing forks */
-    setenv("GC_DONT_GC", "1", 1);
 
     return handleExceptions(argv[0], [&]() {
         initNix();
