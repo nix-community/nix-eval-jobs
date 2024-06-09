@@ -300,6 +300,7 @@ int main(int argc, char **argv) {
     return handleExceptions(argv[0], [&]() {
         initNix();
         initGC();
+        GC_allow_register_threads();
 
         myArgs.parseArgs(argv, argc);
 
