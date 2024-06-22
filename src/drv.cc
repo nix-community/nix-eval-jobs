@@ -37,11 +37,19 @@ queryCacheStatus(nix::Store &store,
     store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
                        unknown, downloadSize, narSize);
     if (willBuild.empty() && unknown.empty()) {
-        return Drv::CacheStatus::NotBuild;
-    } else if (willSubstitute.empty()) {
-        return Drv::CacheStatus::Local;
+        if (willSubstitute.empty()) {
+            // cacheStatus is Local if:
+            //  - there's nothing to build
+            //  - there's nothing to substitute
+            return Drv::CacheStatus::Local;
+        } else {
+            // cacheStatus is Cached if:
+            //  - there's nothing to build
+            //  - there are paths to substitute
+            return Drv::CacheStatus::Cached;
+        }
     } else {
-        return Drv::CacheStatus::Cached;
+        return Drv::CacheStatus::NotBuilt;
     }
 }
 
@@ -123,6 +131,6 @@ void to_json(nlohmann::json &json, const Drv &drv) {
         json["cacheStatus"] =
             drv.cacheStatus == Drv::CacheStatus::Cached  ? "cached"
             : drv.cacheStatus == Drv::CacheStatus::Local ? "local"
-                                                         : "notBuild";
+                                                         : "notBuilt";
     }
 }
