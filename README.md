@@ -119,7 +119,7 @@ If you provide the `--check-cache-status`, the json will contain a
 | -------- | ------------------------------------------------------- |
 | local    | Package is present locally                              |
 | cached   | Package is present in the binary cache, but not locally |
-| notBuild | Package needs to be build.                              |
+| notBuilt | Package needs to be built.                              |
 
 ### How can I evaluate nixpkgs?
 

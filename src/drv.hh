@@ -23,7 +23,7 @@ struct Drv {
     std::string system;
     std::string drvPath;
 
-    enum class CacheStatus { Local, Cached, NotBuild, Unknown } cacheStatus;
+    enum class CacheStatus { Local, Cached, NotBuilt, Unknown } cacheStatus;
     std::map<std::string, std::string> outputs;
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;
