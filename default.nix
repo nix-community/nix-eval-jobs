@@ -17,6 +17,7 @@ stdenv.mkDerivation {
     nlohmann_json
     nix
     boost
+    curl
   ];
   nativeBuildInputs = with pkgs; [
     meson
