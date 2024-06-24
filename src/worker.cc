@@ -21,7 +21,6 @@
 #include <nix/file-system.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
-#include <nix/input-accessor.hh>
 #include <nix/logging.hh>
 #include <nix/nixexpr.hh>
 #include <nlohmann/detail/json_ref.hpp>
