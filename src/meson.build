@@ -22,6 +22,7 @@ configure_file(
 
 executable('nix-eval-jobs', src,
            dependencies : [
+             libcurl_dep,
              nix_main_dep,
              nix_store_dep,
              nix_expr_dep,
