@@ -9,42 +9,46 @@
   inputs.nix-github-actions.url = "github:nix-community/nix-github-actions";
   inputs.nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = inputs @ { flake-parts, ... }:
+  outputs =
+    inputs@{ flake-parts, ... }:
     let
       inherit (inputs.nixpkgs) lib;
       inherit (inputs) self;
       nixVersion = lib.fileContents ./.nix-version;
     in
-    flake-parts.lib.mkFlake { inherit inputs; }
-      {
-        systems = inputs.nixpkgs.lib.systems.flakeExposed;
-        imports = [ inputs.treefmt-nix.flakeModule ];
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = inputs.nixpkgs.lib.systems.flakeExposed;
+      imports = [ inputs.treefmt-nix.flakeModule ];
 
-        flake.githubActions = inputs.nix-github-actions.lib.mkGithubMatrix {
-          checks = {
-            inherit (self.checks) x86_64-linux;
-            x86_64-darwin = builtins.removeAttrs self.checks.x86_64-darwin [ "treefmt" ];
+      flake.githubActions = inputs.nix-github-actions.lib.mkGithubMatrix {
+        checks = {
+          inherit (self.checks) x86_64-linux;
+          x86_64-darwin = builtins.removeAttrs self.checks.x86_64-darwin [ "treefmt" ];
+        };
+      };
+
+      perSystem =
+        { pkgs, self', ... }:
+        let
+          drvArgs = {
+            srcDir = self;
+            nix =
+              if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
+          };
+        in
+        {
+          treefmt.imports = [ ./dev/treefmt.nix ];
+          packages.nix-eval-jobs = pkgs.callPackage ./default.nix drvArgs;
+          packages.clangStdenv-nix-eval-jobs = pkgs.callPackage ./default.nix (
+            drvArgs // { stdenv = pkgs.clangStdenv; }
+          );
+          packages.default = self'.packages.nix-eval-jobs;
+          devShells.default = pkgs.callPackage ./shell.nix drvArgs;
+          devShells.clang = pkgs.callPackage ./shell.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
+
+          checks = builtins.removeAttrs self'.packages [ "default" ] // {
+            shell = self'.devShells.default;
           };
         };
-
-        perSystem = { pkgs, self', ... }:
-          let
-            drvArgs = {
-              srcDir = self;
-              nix = if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
-            };
-          in
-          {
-            treefmt.imports = [ ./dev/treefmt.nix ];
-            packages.nix-eval-jobs = pkgs.callPackage ./default.nix drvArgs;
-            packages.clangStdenv-nix-eval-jobs = pkgs.callPackage ./default.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
-            packages.default = self'.packages.nix-eval-jobs;
-            devShells.default = pkgs.callPackage ./shell.nix drvArgs;
-            devShells.clang = pkgs.callPackage ./shell.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
-
-            checks = builtins.removeAttrs self'.packages [ "default" ] // {
-              shell = self'.devShells.default;
-            };
-          };
-      };
+    };
 }
