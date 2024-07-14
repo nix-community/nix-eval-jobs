@@ -11,7 +11,7 @@ class AutoCloseFD;
 class Bindings;
 class EvalState;
 template <typename T> class ref;
-}  // namespace nix
+} // namespace nix
 
 void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args);
