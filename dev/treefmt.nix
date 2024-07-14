@@ -4,6 +4,7 @@
   projectRootFile = "flake.lock";
 
   programs.deno.enable = true;
+  programs.yamlfmt.enable = true;
 
   programs.clang-format.enable = true;
 
