@@ -87,14 +87,6 @@ single large log file. In the
 [wiki](https://github.com/nix-community/nix-eval-jobs/wiki#ci-example-configurations)
 we collect example ci configuration for various CIs.
 
-## Organisation of this repository
-
-On the `main` branch we target nixUnstable. When a release of nix happens, we
-fork for a release branch i.e. `release-2.8` and change the nix version in
-`.nix-version`. Changes and improvements made in `main` also may be backported
-to these release branches. At the time of writing we only intent to support the
-latest release branch.
-
 ## Projects using nix-eval-jobs
 
 - [nix-fast-build](https://github.com/Mic92/nix-fast-build) - Combine the power
