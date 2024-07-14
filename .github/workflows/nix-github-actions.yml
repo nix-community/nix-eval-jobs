@@ -1,5 +1,4 @@
 name: Nix actions
-
 on:
   pull_request:
   push:
@@ -7,7 +6,6 @@ on:
       - main
       - staging
       - release-*
-
 jobs:
   nix-matrix:
     runs-on: ubuntu-latest
@@ -21,7 +19,6 @@ jobs:
         run: |
           set -Eeu
           echo "matrix=$(nix eval --json '.#githubActions.matrix')" >> "$GITHUB_OUTPUT"
-
   nix-build:
     needs: nix-matrix
     runs-on: ${{ matrix.os }}
@@ -34,29 +31,27 @@ jobs:
   tests:
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-      with:
+      - uses: actions/checkout@v4
+        with:
           # Nix Flakes doesn't work on shallow clones
           fetch-depth: 0
-    - uses: cachix/install-nix-action@v27
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-        extra_nix_config: |
-          accept-flake-config = true
-    - name: Build
-      run: nix develop -c bash -c 'meson setup -Db_sanitize=address,undefined build && ninja -C build'
-    - name: Run tests
-      run: nix develop -c pytest ./tests -m 'not infiniterecursion'
-
-    # address sanitizer will lead to out-of-memory in the infinite recursion case
-    - name: Build without sanitizer
-      run: nix develop -c bash -c 'rm -rf build && meson setup build && ninja -C build'
-    - name: Run tests
-      run: nix develop -c pytest ./tests -m 'infiniterecursion'
-
+      - uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            accept-flake-config = true
+      - name: Build
+        run: nix develop -c bash -c 'meson setup -Db_sanitize=address,undefined build && ninja -C build'
+      - name: Run tests
+        run: nix develop -c pytest ./tests -m 'not infiniterecursion'
+      # address sanitizer will lead to out-of-memory in the infinite recursion case
+      - name: Build without sanitizer
+        run: nix develop -c bash -c 'rm -rf build && meson setup build && ninja -C build'
+      - name: Run tests
+        run: nix develop -c pytest ./tests -m 'infiniterecursion'
   collect:
     runs-on: ubuntu-latest
     needs:

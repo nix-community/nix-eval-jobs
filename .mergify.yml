@@ -2,7 +2,6 @@ queue_rules:
   - name: default
     merge_conditions:
       - check-success=collect
-
 defaults:
   actions:
     queue:
