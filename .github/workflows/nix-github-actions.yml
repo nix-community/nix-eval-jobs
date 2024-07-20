@@ -25,6 +25,22 @@ jobs:
     strategy:
       matrix: ${{fromJSON(needs.nix-matrix.outputs.matrix)}}
     steps:
+      - name: Figure out if we are running in a Namespace.so runner or not
+        shell: bash
+        run: |
+          if [ -n "$NSC_CONTAINER_REGISTRY" ]; then
+            echo "NAMESPACE_RUNNER=1" >> $GITHUB_ENV
+          fi
+      - name: namespacelabs/nscloud-cache-action cannot mkdir /nix so we do it manually
+        if: env.NAMESPACE_RUNNER
+        shell: bash
+        run: |
+          sudo mkdir /nix
+          sudo chown $USER /nix
+      - uses: namespacelabs/nscloud-cache-action@v1
+        if: env.NAMESPACE_RUNNER
+        with:
+          path: /nix
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v27
       - run: nix build -L ".#${{ matrix.attr }}"
