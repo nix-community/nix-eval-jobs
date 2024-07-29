@@ -85,7 +85,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         if (args.flake) {
             auto [flakeRef, fragment, outputSpec] =
                 nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-                    args.releaseExpr, nix::absPath("."));
+                    nix::fetchSettings, args.releaseExpr, nix::absPath("."));
             nix::InstallableFlake flake{
                 {}, state, std::move(flakeRef), fragment, outputSpec,
                 {}, {},    args.lockFlags};
@@ -158,7 +158,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
 
                     for (auto &i :
                          v->attrs()->lexicographicOrder(state->symbols)) {
-                        const std::string &name = state->symbols[i->name];
+                        const std::string_view &name = state->symbols[i->name];
                         attrs.push_back(name);
 
                         if (name == "recurseForDerivations" &&

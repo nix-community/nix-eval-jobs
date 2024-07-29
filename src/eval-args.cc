@@ -94,7 +94,8 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
             lockFlags.allowUnlocked = true;
             lockFlags.inputOverrides.insert_or_assign(
                 nix::flake::parseInputPath(inputPath),
-                nix::parseFlakeRef(flakeRef, nix::absPath("."), true));
+                nix::parseFlakeRef(nix::fetchSettings, flakeRef,
+                                   nix::absPath("."), true));
         }},
     });
 
