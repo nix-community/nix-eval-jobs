@@ -1,6 +1,7 @@
 {
   description = "Hydra's builtin hydra-eval-jobs as a standalone";
 
+  inputs.nix.url = "github:tomberek/nix/tomberek.add_flake_headers";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -43,12 +44,13 @@
       };
 
       perSystem =
-        { pkgs, self', ... }:
+        { system, pkgs, self', ... }:
         let
           drvArgs = {
             srcDir = self;
             nix =
-              if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
+        inputs.nix.packages.${system}.default;
+              # if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
           };
         in
         {
