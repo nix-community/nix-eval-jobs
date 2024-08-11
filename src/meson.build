@@ -27,6 +27,7 @@ executable('nix-eval-jobs', src,
              nix_store_dep,
              nix_expr_dep,
              nix_cmd_dep,
+             nix_flake_dep,
              boost_dep,
              nlohmann_json_dep,
              threads_dep

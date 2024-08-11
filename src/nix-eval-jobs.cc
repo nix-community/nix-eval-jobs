@@ -5,6 +5,7 @@
 #include <nix/shared.hh>
 #include <nix/sync.hh>
 #include <nix/eval.hh>
+#include <nix/eval-gc.hh>
 #include <nix/signals.hh>
 #include <nix/terminal.hh>
 #include <sys/wait.h>
@@ -73,8 +74,9 @@ struct Proc {
                     auto evalStore = myArgs.evalStoreUrl
                                          ? openStore(*myArgs.evalStoreUrl)
                                          : openStore();
-                    auto state = std::make_shared<EvalState>(myArgs.lookupPath,
-                                                             evalStore);
+                    auto state = std::make_shared<EvalState>(
+                        myArgs.lookupPath, evalStore, fetchSettings,
+                        evalSettings);
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
                     proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);
                 } catch (Error &e) {
@@ -364,6 +366,7 @@ int main(int argc, char **argv) {
     return handleExceptions(argv[0], [&]() {
         initNix();
         initGC();
+        flake::initLib(flakeSettings);
 
         myArgs.parseArgs(argv, argc);
 
