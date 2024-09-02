@@ -23,12 +23,13 @@
 #include "drv.hh"
 #include "error.hh"
 #include "eval-args.hh"
-
 static Drv::CacheStatus
 queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::optional<std::string>> &outputs) {
+                 std::map<std::string, std::optional<std::string>> &outputs,
+                 std::vector<std::string> &neededBuilds,
+                 std::vector<std::string> &neededSubstitutes,
+                 std::vector<std::string> &unknownPaths) {
     uint64_t downloadSize, narSize;
-    nix::StorePathSet willBuild, willSubstitute, unknown;
 
     std::vector<nix::StorePathWithOutputs> paths;
     for (auto const &[key, val] : outputs) {
@@ -36,9 +37,43 @@ queryCacheStatus(nix::Store &store,
             paths.push_back(followLinksToStorePathWithOutputs(store, *val));
         }
     }
+    nix::StorePathSet willBuild, willSubstitute, unknown;
 
     store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
                        unknown, downloadSize, narSize);
+
+    if (!willBuild.empty()) {
+        // TODO: can we expose the topological sort order as a graph?
+        auto sorted = store.topoSortPaths(willBuild);
+        reverse(sorted.begin(), sorted.end());
+        for (auto &i : sorted) {
+            neededBuilds.push_back(store.printStorePath(i));
+        }
+    }
+    if (!willSubstitute.empty()) {
+        std::vector<const nix::StorePath *> willSubstituteSorted = {};
+        std::for_each(willSubstitute.begin(), willSubstitute.end(),
+                      [&](const nix::StorePath &p) {
+                          willSubstituteSorted.push_back(&p);
+                      });
+        std::sort(willSubstituteSorted.begin(), willSubstituteSorted.end(),
+                  [](const nix::StorePath *lhs, const nix::StorePath *rhs) {
+                      if (lhs->name() == rhs->name())
+                          return lhs->to_string() < rhs->to_string();
+                      else
+                          return lhs->name() < rhs->name();
+                  });
+        for (auto p : willSubstituteSorted) {
+            neededSubstitutes.push_back(store.printStorePath(*p));
+        }
+    }
+
+    if (!unknown.empty()) {
+        for (auto &i : unknown) {
+            unknownPaths.push_back(store.printStorePath(i));
+        }
+    }
+
     if (willBuild.empty() && unknown.empty()) {
         if (willSubstitute.empty()) {
             // cacheStatus is Local if:
@@ -115,7 +150,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         meta = meta_;
     }
     if (args.checkCacheStatus) {
-        cacheStatus = queryCacheStatus(*localStore, outputs);
+        // TODO: is this a bottleneck, where we should batch these queries?
+        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
+                                       neededSubstitutes, unknownPaths);
     } else {
         cacheStatus = Drv::CacheStatus::Unknown;
     }
@@ -160,5 +197,10 @@ void to_json(nlohmann::json &json, const Drv &drv) {
             drv.cacheStatus == Drv::CacheStatus::Cached  ? "cached"
             : drv.cacheStatus == Drv::CacheStatus::Local ? "local"
                                                          : "notBuilt";
+
+        json["neededBuilds"] = drv.neededBuilds;
+        json["neededSubstitutes"] = drv.neededSubstitutes;
+        // TODO: is it useful to include "unknown" paths at all?
+        // json["unknown"] = drv.unknownPaths;
     }
 }
