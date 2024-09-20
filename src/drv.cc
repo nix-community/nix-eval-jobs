@@ -25,13 +25,15 @@
 
 static Drv::CacheStatus
 queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::string> &outputs) {
+                 std::map<std::string, std::optional<std::string>> &outputs) {
     uint64_t downloadSize, narSize;
     nix::StorePathSet willBuild, willSubstitute, unknown;
 
     std::vector<nix::StorePathWithOutputs> paths;
     for (auto const &[key, val] : outputs) {
-        paths.push_back(followLinksToStorePathWithOutputs(store, val));
+        if (val) {
+            paths.push_back(followLinksToStorePathWithOutputs(store, *val));
+        }
     }
 
     store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
@@ -58,11 +60,21 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
+    const bool hasCaDerivations =
+        nix::experimentalFeatureSettings.isEnabled(nix::Xp::CaDerivations);
 
     try {
-        for (auto out : packageInfo.queryOutputs(true)) {
-            if (out.second)
-                outputs[out.first] = localStore->printStorePath(*out.second);
+        // CA derivations do not have static output paths, so we have to
+        // defensively not query output paths in case we encounter one.
+        for (auto &[outputName, optOutputPath] :
+             packageInfo.queryOutputs(!hasCaDerivations)) {
+            if (optOutputPath) {
+                outputs[outputName] =
+                    localStore->printStorePath(*optOutputPath);
+            } else {
+                assert(hasCaDerivations);
+                outputs[outputName] = std::nullopt;
+            }
         }
     } catch (const std::exception &e) {
         state
@@ -113,10 +125,16 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 }
 
 void to_json(nlohmann::json &json, const Drv &drv) {
+    std::map<std::string, nlohmann::json> outputsJson;
+    for (auto &[name, optPath] : drv.outputs) {
+        outputsJson[name] =
+            optPath ? nlohmann::json(*optPath) : nlohmann::json(nullptr);
+    }
+
     json = nlohmann::json{{"name", drv.name},
                           {"system", drv.system},
                           {"drvPath", drv.drvPath},
-                          {"outputs", drv.outputs},
+                          {"outputs", outputsJson},
                           {"inputDrvs", drv.inputDrvs}};
 
     if (drv.meta.has_value()) {
