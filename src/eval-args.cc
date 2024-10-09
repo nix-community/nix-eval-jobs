@@ -99,6 +99,18 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         }},
     });
 
+    addFlag({.longName = "reference-lock-file",
+             .description = "Read the given lock file instead of `flake.lock` "
+                            "within the top-level flake.",
+             .category = category,
+             .labels = {"flake-lock-path"},
+             .handler = {[&](std::string lockFilePath) {
+                 lockFlags.referenceLockFilePath = {
+                     nix::getFSSourceAccessor(),
+                     nix::CanonPath(nix::absPath(lockFilePath))};
+             }},
+             .completer = completePath});
+
     expectArg("expr", &releaseExpr);
 }
 
