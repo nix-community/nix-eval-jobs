@@ -58,6 +58,21 @@
             drvArgs // { stdenv = pkgs.clangStdenv; }
           );
           packages.default = self'.packages.nix-eval-jobs;
+
+          packages.dep-a = pkgs.runCommand "dep-a" { } ''
+            mkdir -p $out
+            echo "dep-a" > $out/dep-a
+          '';
+          packages.dep-b = pkgs.runCommand "dep-b" { } ''
+            mkdir -p $out
+            echo "dep-b" > $out/dep-b
+          '';
+          packages.package-with-deps = pkgs.runCommand "package-with-deps" { } ''
+            mkdir -p $out
+            cp -r ${self'.packages.dep-a} $out/dep-a
+            cp -r ${self'.packages.dep-b} $out/dep-b
+          '';
+
           devShells.default = pkgs.callPackage ./shell.nix drvArgs;
           devShells.clang = pkgs.callPackage ./shell.nix (drvArgs // { stdenv = pkgs.clangStdenv; });
 
