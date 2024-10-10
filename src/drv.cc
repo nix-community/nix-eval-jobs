@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "drv.hh"
+#include "error.hh"
 #include "eval-args.hh"
 
 static Drv::CacheStatus
@@ -60,20 +61,29 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
-    const bool hasCaDerivations =
-        nix::experimentalFeatureSettings.isEnabled(nix::Xp::CaDerivations);
 
     try {
         // CA derivations do not have static output paths, so we have to
-        // defensively not query output paths in case we encounter one.
-        for (auto &[outputName, optOutputPath] :
-             packageInfo.queryOutputs(!hasCaDerivations)) {
-            if (optOutputPath) {
+        // fallback if we encounter an error
+        try {
+            for (auto &[outputName, optOutputPath] :
+                 packageInfo.queryOutputs(true)) {
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
-            } else {
-                assert(hasCaDerivations);
-                outputs[outputName] = std::nullopt;
+            }
+        } catch (const nix::UnimplementedError &e) {
+            if (!nix::experimentalFeatureSettings.isEnabled(
+                    nix::Xp::CaDerivations)) {
+                // If we do have CA derivations enabled, we should not encounter
+                // this error.
+                throw;
+            }
+            // we are probably hitting this:
+            // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
+            for (auto &[outputName, optOutputPath] :
+                 packageInfo.queryOutputs(false)) {
+                outputs[outputName] =
+                    localStore->printStorePath(*optOutputPath);
             }
         }
     } catch (const std::exception &e) {
