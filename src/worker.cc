@@ -141,9 +141,64 @@ void worker(
             state->autoCallFunction(autoArgs, *vTmp, *v);
 
             if (v->type() == nix::nAttrs) {
-                auto packageInfo = nix::getDerivation(*state, *v, false);
-                if (packageInfo) {
-                    auto drv = Drv(attrPathS, *state, *packageInfo, args);
+                if (auto packageInfo = nix::getDerivation(*state, *v, false)) {
+                    std::optional<Constituents> maybeConstituents;
+                    if (args.constituents) {
+                        std::vector<std::string> constituents;
+                        std::vector<std::string> namedConstituents;
+                        auto a = v->attrs()->get(
+                            state->symbols.create("_hydraAggregate"));
+                        if (a &&
+                            state->forceBool(*a->value, a->pos,
+                                             "while evaluating the "
+                                             "`_hydraAggregate` attribute")) {
+                            auto a = v->attrs()->get(
+                                state->symbols.create("constituents"));
+                            if (!a)
+                                state
+                                    ->error<nix::EvalError>(
+                                        "derivation must have a ‘constituents’ "
+                                        "attribute")
+                                    .debugThrow();
+
+                            nix::NixStringContext context;
+                            state->coerceToString(
+                                a->pos, *a->value, context,
+                                "while evaluating the `constituents` attribute",
+                                true, false);
+                            for (auto &c : context)
+                                std::visit(
+                                    nix::overloaded{
+                                        [&](const nix::NixStringContextElem::
+                                                Built &b) {
+                                            constituents.push_back(
+                                                b.drvPath->to_string(
+                                                    *state->store));
+                                        },
+                                        [&](const nix::NixStringContextElem::
+                                                Opaque &o) {},
+                                        [&](const nix::NixStringContextElem::
+                                                DrvDeep &d) {},
+                                    },
+                                    c.raw);
+
+                            state->forceList(*a->value, a->pos,
+                                             "while evaluating the "
+                                             "`constituents` attribute");
+                            for (unsigned int n = 0; n < a->value->listSize();
+                                 ++n) {
+                                auto v = a->value->listElems()[n];
+                                state->forceValue(*v, nix::noPos);
+                                if (v->type() == nix::nString)
+                                    namedConstituents.push_back(
+                                        std::string(v->c_str()));
+                            }
+                        }
+                        maybeConstituents =
+                            Constituents(constituents, namedConstituents);
+                    }
+                    auto drv = Drv(attrPathS, *state, *packageInfo, args,
+                                   maybeConstituents);
                     reply.update(drv);
 
                     /* Register the derivation as a GC root.  !!! This

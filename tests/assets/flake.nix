@@ -2,7 +2,7 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs, ... }:
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
     in
@@ -24,6 +24,36 @@
               recursiveAttr = recursion;
               builder = ":";
             };
+        };
+        success = {
+          aggregate =
+            pkgs.runCommand "aggregate"
+              {
+                _hydraAggregate = true;
+                constituents = [
+                  self.hydraJobs.builtJob
+                  "anotherone"
+                ];
+              }
+              ''
+                touch $out
+              '';
+          anotherone = pkgs.writeText "constituent" "text";
+        };
+        failures = {
+          aggregate =
+            pkgs.runCommand "aggregate"
+              {
+                _hydraAggregate = true;
+                constituents = [
+                  "doesntexist"
+                  "doesnteval"
+                ];
+              }
+              ''
+                touch $out
+              '';
+          doesnteval = pkgs.writeText "constituent" (toString { });
         };
       };
     };

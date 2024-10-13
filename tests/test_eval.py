@@ -98,6 +98,72 @@ def test_eval_error() -> None:
         assert "this is an evaluation error" in attrs["error"]
 
 
+def test_constituents() -> None:
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--workers",
+            "1",
+            "--flake",
+            ".#legacyPackages.x86_64-linux.success",
+            "--constituents",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert len(results) == 2
+        child = results[0]
+        assert child["attr"] == "anotherone"
+        aggregate = results[1]
+        assert aggregate["attr"] == "aggregate"
+        assert "namedConstituents" not in aggregate
+        assert aggregate["constituents"][0].endswith("-job1.drv")
+        assert aggregate["constituents"][1] == child["drvPath"]
+        assert "error" not in aggregate
+
+
+def test_constituents_error() -> None:
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--workers",
+            "1",
+            "--flake",
+            ".#legacyPackages.x86_64-linux.failures",
+            "--constituents",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert len(results) == 2
+        child = results[0]
+        assert child["attr"] == "doesnteval"
+        assert "error" in child
+        aggregate = results[1]
+        assert aggregate["attr"] == "aggregate"
+        assert "namedConstituents" not in aggregate
+        assert aggregate["error"].startswith(
+            '"doesntexist": does not exist\n"doesnteval": "error: derivation '
+        )
+        assert aggregate["constituents"] == []
+
+
 @pytest.mark.infiniterecursion
 def test_recursion_error() -> None:
     with TemporaryDirectory() as tempdir:
