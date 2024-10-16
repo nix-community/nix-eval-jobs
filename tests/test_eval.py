@@ -98,6 +98,34 @@ def test_eval_error() -> None:
         assert "this is an evaluation error" in attrs["error"]
 
 
+def test_apply() -> None:
+    with TemporaryDirectory() as tempdir:
+        applyExpr = """drv: {
+            the-name: drv.name;
+            version: builtins.tryEval drv.version or null;
+        }"""
+
+        cmd = [str(BIN), "--gc-roots-dir", tempdir, "--apply", applyExpr]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert results[0]["the-name"] == "job1"
+        assert results[0]["version"] is None
+        assert results[1]["the-name"].startswith("nix-")
+        assert results[1]["version"] is not None
+        assert results[2]["the-name"] == "drvB"
+        assert results[2]["version"] is None
+        assert results[3]["the-name"].startswith("nix-")
+        assert results[3]["version"] is not None
+
+
 @pytest.mark.infiniterecursion
 def test_recursion_error() -> None:
     with TemporaryDirectory() as tempdir:
