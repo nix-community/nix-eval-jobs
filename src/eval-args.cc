@@ -102,6 +102,12 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
              .description = "treat the argument as a Nix expression",
              .handler = {&fromArgs, true}});
 
+    addFlag(
+        {.longName = "apply",
+         .description = "apply the derivation to the provided Nix expression",
+         .labels = {"expr"},
+         .handler = {&applyExpr}});
+
     // usually in MixFlakeOptions
     addFlag({
         .longName = "override-input",

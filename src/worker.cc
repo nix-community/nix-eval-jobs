@@ -9,6 +9,7 @@
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/installable-flake.hh>
+#include <nix/value-to-json.hh>
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
 #include <cstdio>
@@ -147,6 +148,7 @@ void worker(
 
             if (v->type() == nix::nAttrs) {
                 if (auto packageInfo = nix::getDerivation(*state, *v, false)) {
+
                     std::optional<Constituents> maybeConstituents;
                     if (args.constituents) {
                         std::vector<std::string> constituents;
@@ -203,6 +205,26 @@ void worker(
                         }
                         maybeConstituents =
                             Constituents(constituents, namedConstituents);
+                    } else if (args.applyExpr != "") {
+                        auto applyExpr = state->parseExprFromString(
+                            args.applyExpr, state->rootPath("."));
+
+                        nix::Value vApply;
+                        nix::Value vRes;
+
+                        state->eval(applyExpr, vApply);
+
+                        state->callFunction(vApply, *v, vRes, nix::noPos);
+                        state->forceAttrs(
+                            vRes, nix::noPos,
+                            "apply needs to evaluate to an attrset");
+
+                        nix::NixStringContext context;
+                        std::stringstream ss;
+                        nix::printValueAsJSON(*state, true, vRes, nix::noPos,
+                                              ss, context);
+
+                        reply.update(nlohmann::json::parse(ss.str()));
                     }
                     auto drv = Drv(attrPathS, *state, *packageInfo, args,
                                    maybeConstituents);
