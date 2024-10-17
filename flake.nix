@@ -25,14 +25,14 @@
           "x86_64-linux" = [
             "nscloud-ubuntu-22.04-amd64-4x16-with-cache"
             "nscloud-cache-size-20gb"
-            "nscloud-cache-tag-nix-eval-jobs"
+            "nscloud-cache-tag-nix-eval-jobs-x86_64-linux"
           ];
           "x86_64-darwin" = "macos-12";
           "aarch64-darwin" = "macos-14";
           "aarch64-linux" = [
             "nscloud-ubuntu-22.04-arm64-4x16-with-cache"
             "nscloud-cache-size-20gb"
-            "nscloud-cache-tag-nix-eval-jobs"
+            "nscloud-cache-tag-nix-eval-jobs-aarch64-linux"
           ];
         };
 
