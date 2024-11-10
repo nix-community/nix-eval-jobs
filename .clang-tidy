@@ -13,15 +13,8 @@ Checks:
   # maybe address this in the future
   - -readability-function-cognitive-complexity
 
-  - cppcoreguidelines-pro-type-cstyle-cast
-  - cppcoreguidelines-init-variables
-  - cppcoreguidelines-pro-type-member-init
-  - cppcoreguidelines-pro-type-vararg
-  - cppcoreguidelines-prefer-member-initializer
-  - cppcoreguidelines-misleading-capture-default-by-value
-  - cppcoreguidelines-virtual-class-destructor
-  - cppcoreguidelines-special-member-functions
-  - cppcoreguidelines-owning-memory
+  - cppcoreguidelines-*
+  - -cppcoreguidelines-avoid-magic-numbers
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True

@@ -48,6 +48,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <span>
 
 #include "eval-args.hh"
 #include "buffered-io.hh"
@@ -57,7 +58,7 @@ using namespace nix;
 using namespace nlohmann;
 
 namespace {
-MyArgs myArgs;
+MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 }
 
 using Processor = std::function<void(ref<EvalState> state, Bindings &autoArgs,
@@ -394,7 +395,9 @@ auto main(int argc, char **argv) -> int {
     */
     curl_global_init(CURL_GLOBAL_ALL);
 
-    return handleExceptions(argv[0], [&]() {
+    auto args = std::span(argv, argc);
+
+    return handleExceptions(args[0], [&]() {
         initNix();
         initGC();
         flake::initLib(flakeSettings);

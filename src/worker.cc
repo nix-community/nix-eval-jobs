@@ -212,7 +212,9 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel cha
            start a new process. */
         struct rusage r = {}; // NOLINT(misc-include-cleaner)
         getrusage(RUSAGE_SELF, &r);
-        if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024) {
+        const size_t maxrss =
+            r.ru_maxrss; // NOLINT(cppcoreguidelines-pro-type-union-access)
+        if (maxrss > args.maxMemorySize * 1024) {
             break;
         }
     }
