@@ -3,14 +3,14 @@ Checks:
   - bugprone-*
   - performance-*
   - modernize-*
-  - readability-braces-around-statements
-  - readability-else-after-return
-  - readability-container-size-empty
-  - readability-implicit-bool-conversion
-  - readability-qualified-auto
-  - readability-container-contains
-  - readability-duplicate-include
-  - readability-isolate-declaration
+  - readability-*
+
+  # don't find them too problematic
+  - -readability-identifier-length
+  - -readability-magic-numbers
+
+  # maybe address this in the future
+  - -readability-function-cognitive-complexity
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
