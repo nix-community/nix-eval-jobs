@@ -91,7 +91,7 @@ struct Proc {
                     proc(ref<EvalState>(state), autoArgs, channel, myArgs);
                 } catch (Error &e) {
                     nlohmann::json err;
-                    auto &msg = e.msg();
+                    const auto &msg = e.msg();
                     err["error"] = nix::filterANSIEscapes(msg, true);
                     printError(msg);
                     if (tryWriteLine(to->get(), err.dump()) < 0) {

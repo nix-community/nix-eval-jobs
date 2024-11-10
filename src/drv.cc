@@ -102,11 +102,11 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
     if (args.meta) {
         nlohmann::json meta_;
-        for (auto &metaName : packageInfo.queryMetaNames()) {
+        for (const auto &metaName : packageInfo.queryMetaNames()) {
             nix::NixStringContext context;
             std::stringstream ss;
 
-            auto metaValue = packageInfo.queryMeta(metaName);
+            auto *metaValue = packageInfo.queryMeta(metaName);
             // Skip non-serialisable types
             // TODO: Fix serialisation of derivations to store paths
             if (metaValue == nullptr) {
@@ -131,7 +131,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
     auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
     for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
         std::set<std::string> inputDrvOutputs;
-        for (auto &outputName : inputNode.value) {
+        for (const auto &outputName : inputNode.value) {
             inputDrvOutputs.insert(outputName);
         }
         inputDrvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
@@ -142,7 +142,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
 void to_json(nlohmann::json &json, const Drv &drv) {
     std::map<std::string, nlohmann::json> outputsJson;
-    for (auto &[name, optPath] : drv.outputs) {
+    for (const auto &[name, optPath] : drv.outputs) {
         outputsJson[name] =
             optPath ? nlohmann::json(*optPath) : nlohmann::json(nullptr);
     }

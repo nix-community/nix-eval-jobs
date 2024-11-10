@@ -66,7 +66,7 @@ static auto releaseExprTopLevelValue(nix::EvalState &state,
         state.evalFile(lookupFileArg(state, args.releaseExpr), vTop);
     }
 
-    auto vRoot = state.allocValue();
+    auto *vRoot = state.allocValue();
 
     state.autoCallFunction(autoArgs, vTop, *vRoot);
 
@@ -126,11 +126,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         nlohmann::json reply =
             nlohmann::json{{"attr", attrPathS}, {"attrPath", path}};
         try {
-            auto vTmp =
+            auto *vTmp =
                 nix::findAlongAttrPath(*state, attrPathS, autoArgs, *vRoot)
                     .first;
 
-            auto v = state->allocValue();
+            auto *v = state->allocValue();
             state->autoCallFunction(autoArgs, *vTmp, *v);
 
             if (v->type() == nix::nAttrs) {
@@ -169,7 +169,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
 
                         if (name == "recurseForDerivations" &&
                             !args.forceRecurse) {
-                            auto attrv =
+                            const auto *attrv =
                                 v->attrs()->get(state->sRecurseForDerivations);
                             recurse = state->forceBool(
                                 *attrv->value, attrv->pos,
@@ -201,7 +201,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         } catch (
             const std::exception &e) { // FIXME: for some reason the catch block
                                        // above, doesn't trigger on macOS (?)
-            auto msg = e.what();
+            const auto *msg = e.what();
             reply["error"] = nix::filterANSIEscapes(msg, true);
             fprintf(stderr, "%s\n", msg);
         }
