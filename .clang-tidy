@@ -1,0 +1,5 @@
+Checks:
+  - -*
+  - bugprone-*
+  - cppcoreguidelines-pro-type-cstyle-cast
+UseColor: true
