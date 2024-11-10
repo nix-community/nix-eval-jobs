@@ -60,9 +60,9 @@ namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 }
 
-using Processor =
-    std::function<void(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-                       const Channel &channel, MyArgs &args)>;
+using Processor = std::function<void(
+    nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
+    nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args)>;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
@@ -79,10 +79,6 @@ struct Proc {
         nix::Pipe fromPipe;
         toPipe.create();
         fromPipe.create();
-
-        to = std::move(toPipe.writeSide);
-        from = std::move(fromPipe.readSide);
-
         auto p = startProcess(
             [&,
              to{std::make_shared<nix::AutoCloseFD>(
@@ -100,11 +96,7 @@ struct Proc {
                         myArgs.lookupPath, evalStore, nix::fetchSettings,
                         nix::evalSettings);
                     nix::Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    const Channel channel{
-                        .from = from,
-                        .to = to,
-                    };
-                    proc(nix::ref<nix::EvalState>(state), autoArgs, channel,
+                    proc(nix::ref<nix::EvalState>(state), autoArgs, *to, *from,
                          myArgs);
                 } catch (nix::Error &e) {
                     nlohmann::json err;
@@ -123,6 +115,8 @@ struct Proc {
             },
             nix::ProcessOptions{.allowVfork = false});
 
+        to = std::move(toPipe.writeSide);
+        from = std::move(fromPipe.readSide);
         pid = p;
     }
 

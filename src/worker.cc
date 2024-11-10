@@ -83,8 +83,10 @@ auto attrPathJoin(nlohmann::json input) -> std::string {
 }
 } // namespace
 
-void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel channel, MyArgs &args) {
-
+void worker(
+    nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
+    nix::AutoCloseFD &to, // NOLINT(bugprone-easily-swappable-parameters)
+    nix::AutoCloseFD &from, MyArgs &args) {
     nix::Value *vRoot = [&]() {
         if (args.flake) {
             auto [flakeRef, fragment, outputSpec] =
@@ -100,11 +102,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel cha
         return releaseExprTopLevelValue(*state, autoArgs, args);
     }();
 
-    LineReader fromReader(channel.from->release());
+    LineReader fromReader(from.release());
 
     while (true) {
         /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(channel.to->get(), "next") < 0) {
+        if (tryWriteLine(to.get(), "next") < 0) {
             return; // main process died
         }
 
@@ -204,7 +206,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel cha
             std::cerr << msg << '\n';
         }
 
-        if (tryWriteLine(channel.to->get(), reply.dump()) < 0) {
+        if (tryWriteLine(to.get(), reply.dump()) < 0) {
             return; // main process died
         }
 
@@ -219,7 +221,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel cha
         }
     }
 
-    if (tryWriteLine(channel.to->get(), "restart") < 0) {
+    if (tryWriteLine(to.get(), "restart") < 0) {
         return; // main process died
     };
 }
