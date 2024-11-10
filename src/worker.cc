@@ -142,7 +142,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                     /* Register the derivation as a GC root.  !!! This
                        registers roots for jobs that we may have already
                        done. */
-                    if (args.gcRootsDir != "") {
+                    if (args.gcRootsDir.empty()) {
                         nix::Path root =
                             args.gcRootsDir + "/" +
                             std::string(nix::baseNameOf(drv.drvPath));
@@ -159,8 +159,8 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                     auto attrs = nlohmann::json::array();
                     bool recurse =
                         args.forceRecurse ||
-                        path.size() == 0; // Dont require `recurseForDerivations
-                                          // = true;` for top-level attrset
+                        path.empty(); // Dont require `recurseForDerivations
+                                      // = true;` for top-level attrset
 
                     for (auto &i :
                          v->attrs()->lexicographicOrder(state->symbols)) {

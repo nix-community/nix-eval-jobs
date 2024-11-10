@@ -404,11 +404,11 @@ auto main(int argc, char **argv) -> int {
             evalSettings.pureEval = true;
         }
 
-        if (myArgs.releaseExpr == "") {
+        if (myArgs.releaseExpr.empty()) {
             throw UsageError("no expression specified");
         }
 
-        if (myArgs.gcRootsDir == "") {
+        if (myArgs.gcRootsDir.empty()) {
             printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
         } else {
             myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
