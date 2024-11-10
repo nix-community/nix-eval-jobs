@@ -2,6 +2,7 @@ Checks:
   - -*
   - bugprone-*
   - performance-*
+  - modernize-use-bool-literals
   - modernize-deprecated-headers
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

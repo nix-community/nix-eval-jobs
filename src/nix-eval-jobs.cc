@@ -178,7 +178,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
     pid_t pid = proc.pid.release();
-    while (1) {
+    while (true) {
         int status;
         int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
