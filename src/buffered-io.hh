@@ -26,7 +26,7 @@ struct MemoryDeleter {
 class LineReader {
   public:
     LineReader(const LineReader &) = delete;
-    LineReader(int fd);
+    explicit LineReader(int fd);
     auto operator=(const LineReader &) -> LineReader & = delete;
     auto operator=(LineReader &&) -> LineReader & = delete;
     ~LineReader() = default;

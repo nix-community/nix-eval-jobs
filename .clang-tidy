@@ -1,5 +1,4 @@
 Checks:
-  - -*
   - bugprone-*
   - performance-*
   - modernize-*
@@ -7,6 +6,10 @@ Checks:
   - misc-*
   - portability-*
   - concurrency-*
+  - google-*
+  - -google-readability-todo
+  # TODO
+  - -google-build-using-namespace
 
   # don't find them too problematic
   - -readability-identifier-length

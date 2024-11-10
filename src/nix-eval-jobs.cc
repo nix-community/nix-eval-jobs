@@ -75,7 +75,7 @@ struct Proc {
     auto operator=(const Proc &) -> Proc & = delete;
     auto operator=(Proc &&) -> Proc & = delete;
 
-    Proc(const Processor &proc) {
+    explicit Proc(const Processor &proc) {
         Pipe toPipe;
         Pipe fromPipe;
         toPipe.create();
@@ -141,7 +141,7 @@ struct Thread {
     auto operator=(const Thread &) -> Thread & = delete;
     auto operator=(Thread &&) -> Thread & = delete;
 
-    Thread(std::function<void(void)> f) {
+    explicit Thread(std::function<void(void)> f) {
         pthread_attr_t attr = {}; // NOLINT(misc-include-cleaner)
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
@@ -290,7 +290,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
             } else if (s != "next") {
                 try {
                     auto json = json::parse(s);
-                    throw Error("worker error: %s", (std::string)json["error"]);
+                    throw Error("worker error: %s", std::string(json["error"]));
                 } catch (const json::exception &e) {
                     throw Error(
                         "Received invalid JSON from worker: %s\n json: '%s'",
