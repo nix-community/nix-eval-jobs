@@ -53,6 +53,7 @@
 #include "eval-args.hh"
 #include "buffered-io.hh"
 #include "worker.hh"
+#include "strings-portable.hh"
 
 using namespace nix;
 using namespace nlohmann;
@@ -203,9 +204,9 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
 
         if (rc == -1) {
             kill(pid, SIGKILL);
-            throw Error(
+            throw nix::Error(
                 "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
-                strerror(errno));
+                get_error_name(errno));
         }
         if (WIFEXITED(status)) {
             if (WEXITSTATUS(status) == 1) {
@@ -242,9 +243,10 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
                     msg);
 #endif
             default:
-                throw Error("while %s, evaluation worker got killed by "
-                            "signal %d (%s)",
-                            msg, WTERMSIG(status), strsignal(WTERMSIG(status)));
+                throw nix::Error("while %s, evaluation worker got killed by "
+                                 "signal %d (%s)",
+                                 msg, WTERMSIG(status),
+                                 get_signal_name(WTERMSIG(status)));
             }
         } // else ignore WIFSTOPPED and WIFCONTINUED
     }
@@ -377,10 +379,10 @@ auto main(int argc, char **argv) -> int {
 
     /* Prevent undeclared dependencies in the evaluation via
        $NIX_PATH. */
-    unsetenv("NIX_PATH");
+    unsetenv("NIX_PATH"); // NOLINT(concurrency-mt-unsafe)
 
     /* We are doing the garbage collection by killing forks */
-    setenv("GC_DONT_GC", "1", 1);
+    setenv("GC_DONT_GC", "1", 1); // NOLINT(concurrency-mt-unsafe)
 
     /* Because of an objc quirk[1], calling curl_global_init for the first time
        after fork() will always result in a crash.

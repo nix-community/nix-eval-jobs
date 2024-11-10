@@ -31,7 +31,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                           << flag->description << "\n";
             }
 
-            ::exit(0);
+            ::exit(0); // NOLINT(concurrency-mt-unsafe)
         }},
     });
 

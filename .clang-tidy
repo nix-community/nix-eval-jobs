@@ -5,6 +5,8 @@ Checks:
   - modernize-*
   - readability-*
   - misc-*
+  - portability-*
+  - concurrency-*
 
   # don't find them too problematic
   - -readability-identifier-length

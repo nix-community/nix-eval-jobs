@@ -3,8 +3,9 @@
 #include <cerrno>
 #include <cstdlib>
 // NOLINTBEGIN(modernize-deprecated-headers)
-// misc-include-cleaner wants this header rather than the C++ version
+// misc-include-cleaner wants these headers rather than the C++ version
 #include <stdio.h>
+#include <string.h>
 // NOLINTEND(modernize-deprecated-headers)
 #include <cstdio>
 #include <nix/error.hh>
@@ -14,6 +15,7 @@
 #include <string_view>
 
 #include "buffered-io.hh"
+#include "strings-portable.hh"
 
 [[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int {
     s += "\n";
@@ -33,12 +35,13 @@
 
 LineReader::LineReader(int fd) : stream(fdopen(fd, "r")) {
     if (stream == nullptr) {
-        throw nix::Error("fdopen(%d) failed: %s", fd, strerror(errno));
+        throw nix::Error("fdopen(%d) failed: %s", fd, get_error_name(errno));
     }
 }
 
 LineReader::LineReader(LineReader &&other) noexcept
-    : stream(other.stream.release()), buffer(other.buffer.release()), len(other.len) {
+    : stream(other.stream.release()), buffer(other.buffer.release()),
+      len(other.len) {
     other.stream = nullptr;
     other.len = 0;
 }
