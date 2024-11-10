@@ -12,6 +12,12 @@
 #include <pthread.h>
 #include <csignal>
 #include <cstdlib>
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants these header rather than the C++ versions
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+// NOLINTEND(modernize-deprecated-headers)
 #include <cstring>
 #include <unistd.h>
 #include <nix/attr-set.hh>
@@ -21,7 +27,6 @@
 #include <nix/globals.hh>
 #include <nix/logging.hh>
 #include <nlohmann/detail/iterators/iter_impl.hpp>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/processes.hh>
 #include <nix/ref.hh>
@@ -31,7 +36,6 @@
 #include <nix/flake/flake.hh>
 #include <nix/signals.hh>
 #include <nix/signals-impl.hh>
-#include <map>
 #include <condition_variable>
 #include <filesystem>
 #include <exception>
@@ -120,14 +124,14 @@ struct Proc {
 // evaluator under an anemic stack of 0.5MiB has it overflow way too quickly.
 // Hence, we have our own custom Thread struct.
 struct Thread {
-    pthread_t thread;
+    pthread_t thread; // NOLINT(misc-include-cleaner)
 
     Thread(const Thread &) = delete;
     Thread(Thread &&) noexcept = default;
 
     Thread(std::function<void(void)> f) {
         int s;
-        pthread_attr_t attr;
+        pthread_attr_t attr; // NOLINT(misc-include-cleaner)
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
 

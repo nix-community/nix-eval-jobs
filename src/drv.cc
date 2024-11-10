@@ -3,11 +3,11 @@
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
+#include <nix/config.hh>
 #include <nix/derivations.hh>
 #include <nix/get-drvs.hh>
 #include <nix/derived-path-map.hh>
 #include <nix/eval.hh>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/path.hh>
@@ -17,10 +17,14 @@
 #include <nix/eval-error.hh>
 #include <nix/experimental-features.hh>
 #include <nix/pos-idx.hh>
+#include <cstdint>
+#include <string>
 #include <exception>
 #include <sstream>
 #include <vector>
-#include <memory>
+#include <optional>
+#include <map>
+#include <set>
 
 #include "drv.hh"
 #include "eval-args.hh"

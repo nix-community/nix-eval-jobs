@@ -5,7 +5,6 @@
 
 #include <nix/eval-error.hh>
 #include <nix/pos-idx.hh>
-#include <nix/source-path.hh>
 #include <nix/terminal.hh>
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
@@ -13,36 +12,34 @@
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
 #include <cstdio>
-#include <cstdlib>
+
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants this header rather than the C++ version
+#include <stdlib.h>
+// NOLINTEND(modernize-deprecated-headers)
+
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
-#include <nix/eval-inline.hh>
 #include <nix/eval.hh>
-#include <nix/file-descriptor.hh>
 #include <nix/file-system.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
 #include <nix/outputs-spec.hh>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
 #include <nix/ref.hh>
 #include <exception>
-#include <map>
-#include <memory>
 #include <numeric>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include "worker.hh"
 #include "drv.hh"
@@ -212,7 +209,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
-        struct rusage r;
+        struct rusage r; // NOLINT(misc-include-cleaner)
         getrusage(RUSAGE_SELF, &r);
         if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024) {
             break;

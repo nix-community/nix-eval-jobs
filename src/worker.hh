@@ -1,5 +1,4 @@
 #pragma once
-#include <nix/shared.hh>
 #include <nix/eval.hh>
 #include <memory>
 

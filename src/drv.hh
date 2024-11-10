@@ -1,6 +1,5 @@
 #include <nix/get-drvs.hh>
 #include <nix/eval.hh>
-#include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <cstdint>
 #include <string>

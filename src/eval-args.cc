@@ -5,11 +5,13 @@
 #include <nix/flake/flake.hh>
 #include <nix/flake/lockfile.hh>
 #include <nix/canon-path.hh>
+#include <nix/common-args.hh>
+#include <nix/common-eval-args.hh>
 #include <nix/source-accessor.hh>
-#include <functional>
+#include <nix/flake/flakeref.hh>
 #include <map>
-#include <memory>
 #include <set>
+#include <string>
 
 #include "eval-args.hh"
 

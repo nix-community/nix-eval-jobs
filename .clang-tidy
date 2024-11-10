@@ -12,5 +12,7 @@ Checks:
   # maybe address this in the future
   - -readability-function-cognitive-complexity
 
+  - misc-include-cleaner
+
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

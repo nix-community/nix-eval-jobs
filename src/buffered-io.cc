@@ -2,10 +2,16 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstdlib>
-#include <sys/types.h>
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants this header rather than the C++ version
+#include <stdio.h>
+// NOLINTEND(modernize-deprecated-headers)
+#include <cstdio>
 #include <nix/error.hh>
 #include <nix/signals.hh>
 #include <nix/signals-impl.hh>
+#include <string>
+#include <string_view>
 
 #include "buffered-io.hh"
 
