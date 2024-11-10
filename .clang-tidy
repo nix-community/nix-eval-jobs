@@ -3,6 +3,5 @@ Checks:
   - bugprone-*
   - performance-*
   - modernize-*
-  - -modernize-use-trailing-return-type
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

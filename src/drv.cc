@@ -25,9 +25,10 @@
 #include "drv.hh"
 #include "eval-args.hh"
 
-static Drv::CacheStatus
+static auto
 queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::optional<std::string>> &outputs) {
+                 std::map<std::string, std::optional<std::string>> &outputs)
+    -> Drv::CacheStatus {
     uint64_t downloadSize, narSize;
     nix::StorePathSet willBuild, willSubstitute, unknown;
 

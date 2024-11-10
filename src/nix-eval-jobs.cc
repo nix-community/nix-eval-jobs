@@ -158,7 +158,7 @@ struct Thread {
     }
 
   private:
-    static void *init(void *ptr) {
+    static auto init(void *ptr) -> void * {
         std::unique_ptr<std::function<void(void)>> func;
         func.reset(static_cast<std::function<void(void)> *>(ptr));
 
@@ -234,7 +234,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     }
 }
 
-std::string joinAttrPath(json &attrPath) {
+auto joinAttrPath(json &attrPath) -> std::string {
     std::string joined;
     for (auto &element : attrPath) {
         if (!joined.empty()) {
@@ -357,7 +357,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
     }
 }
 
-int main(int argc, char **argv) {
+auto main(int argc, char **argv) -> int {
 
     /* Prevent undeclared dependencies in the evaluation via
        $NIX_PATH. */

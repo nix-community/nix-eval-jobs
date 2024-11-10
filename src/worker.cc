@@ -53,9 +53,9 @@ namespace nix {
 struct Expr;
 } // namespace nix
 
-static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
-                                            nix::Bindings &autoArgs,
-                                            MyArgs &args) {
+static auto releaseExprTopLevelValue(nix::EvalState &state,
+                                     nix::Bindings &autoArgs,
+                                     MyArgs &args) -> nix::Value * {
     nix::Value vTop;
 
     if (args.fromArgs) {
@@ -73,7 +73,7 @@ static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
     return vRoot;
 }
 
-static std::string attrPathJoin(nlohmann::json input) {
+static auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
                            [](const std::string &ss, std::string s) {
                                // Escape token if containing dots

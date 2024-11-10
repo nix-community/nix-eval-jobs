@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-[[nodiscard]] int tryWriteLine(int fd, std::string s);
+[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int;
 
 class LineReader {
   public:
@@ -11,7 +11,7 @@ class LineReader {
     ~LineReader();
 
     LineReader(LineReader &&other) noexcept;
-    [[nodiscard]] std::string_view readLine();
+    [[nodiscard]] auto readLine() -> std::string_view;
 
   private:
     FILE *stream = nullptr;

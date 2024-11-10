@@ -9,7 +9,7 @@
 
 #include "buffered-io.hh"
 
-[[nodiscard]] int tryWriteLine(int fd, std::string s) {
+[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int {
     s += "\n";
     std::string_view sv{s};
     while (!sv.empty()) {
@@ -46,7 +46,7 @@ LineReader::LineReader(LineReader &&other) noexcept {
     other.len = 0;
 }
 
-[[nodiscard]] std::string_view LineReader::readLine() {
+[[nodiscard]] auto LineReader::readLine() -> std::string_view {
     ssize_t read = getline(&buffer, &len, stream);
 
     if (read == -1) {
@@ -56,5 +56,5 @@ LineReader::LineReader(LineReader &&other) noexcept {
     nix::checkInterrupt();
 
     // Remove trailing newline
-    return { buffer, static_cast<size_t>(read) - 1 };
+    return {buffer, static_cast<size_t>(read) - 1};
 }
