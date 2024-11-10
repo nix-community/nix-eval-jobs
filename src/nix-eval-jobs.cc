@@ -60,9 +60,8 @@ namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 }
 
-using Processor = std::function<void(
-    nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-    nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args)>;
+using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
+                                     nix::AutoCloseFD &from)>;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
@@ -89,15 +88,7 @@ struct Proc {
                     nix::lvlDebug,
                     nix::fmt("created worker process %d", getpid()));
                 try {
-                    auto evalStore = myArgs.evalStoreUrl
-                                         ? nix::openStore(*myArgs.evalStoreUrl)
-                                         : nix::openStore();
-                    auto state = std::make_shared<nix::EvalState>(
-                        myArgs.lookupPath, evalStore, nix::fetchSettings,
-                        nix::evalSettings);
-                    nix::Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    proc(nix::ref<nix::EvalState>(state), autoArgs, *to, *from,
-                         myArgs);
+                    proc(myArgs, *to, *from);
                 } catch (nix::Error &e) {
                     nlohmann::json err;
                     const auto &msg = e.msg();

@@ -84,9 +84,16 @@ auto attrPathJoin(nlohmann::json input) -> std::string {
 } // namespace
 
 void worker(
-    nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
+    MyArgs &args,
     nix::AutoCloseFD &to, // NOLINT(bugprone-easily-swappable-parameters)
-    nix::AutoCloseFD &from, MyArgs &args) {
+    nix::AutoCloseFD &from) {
+
+    auto evalStore = args.evalStoreUrl ? nix::openStore(*args.evalStoreUrl)
+                                       : nix::openStore();
+    auto state = nix::make_ref<nix::EvalState>(
+        args.lookupPath, evalStore, nix::fetchSettings, nix::evalSettings);
+    nix::Bindings &autoArgs = *args.getAutoArgs(*state);
+
     nix::Value *vRoot = [&]() {
         if (args.flake) {
             auto [flakeRef, fragment, outputSpec] =
