@@ -122,17 +122,21 @@ struct Thread {
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
 
-        if ((s = pthread_attr_init(&attr)) != 0) {
+        s = pthread_attr_init(&attr);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_init");
         }
-        if ((s = pthread_attr_setstacksize(&attr, 64 * 1024 * 1024)) != 0) {
+        s = pthread_attr_setstacksize(&attr,
+                                      static_cast<size_t>(64) * 1024 * 1024);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_setstacksize");
         }
-        if ((s = pthread_create(&thread, &attr, Thread::init,
-                                func.release())) != 0) {
+        s = pthread_create(&thread, &attr, Thread::init, func.release());
+        if (s != 0) {
             throw SysError(s, "calling pthread_launch");
         }
-        if ((s = pthread_attr_destroy(&attr)) != 0) {
+        s = pthread_attr_destroy(&attr);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_destroy");
         }
     }
