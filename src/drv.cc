@@ -1,32 +1,34 @@
 #include <nix/config.h> // IWYU pragma: keep
-
 #include <nix/path-with-outputs.hh>
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
 #include <nix/derivations.hh>
 #include <nix/get-drvs.hh>
-#include <stdint.h>
 #include <nix/derived-path-map.hh>
 #include <nix/eval.hh>
-#include <nix/get-drvs.hh>
-#include <nix/nixexpr.hh>
 #include <nlohmann/detail/json_ref.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <nix/path.hh>
 #include <nix/ref.hh>
 #include <nix/value/context.hh>
+#include <nix/error.hh>
+#include <nix/eval-error.hh>
+#include <nix/experimental-features.hh>
+#include <nix/pos-idx.hh>
 #include <exception>
 #include <sstream>
-#include <utility>
 #include <vector>
+#include <memory>
 
 #include "drv.hh"
-#include "error.hh"
 #include "eval-args.hh"
 
-static Drv::CacheStatus
+static auto
 queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::optional<std::string>> &outputs) {
+                 std::map<std::string, std::optional<std::string>> &outputs)
+    -> Drv::CacheStatus {
     uint64_t downloadSize, narSize;
     nix::StorePathSet willBuild, willSubstitute, unknown;
 
@@ -68,6 +70,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         try {
             for (auto &[outputName, optOutputPath] :
                  packageInfo.queryOutputs(true)) {
+                if (!optOutputPath) {
+                    continue;
+                }
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
             }
@@ -82,6 +87,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
             for (auto &[outputName, optOutputPath] :
                  packageInfo.queryOutputs(false)) {
+                if (!optOutputPath) {
+                    continue;
+                }
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
             }
@@ -103,7 +111,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             auto metaValue = packageInfo.queryMeta(metaName);
             // Skip non-serialisable types
             // TODO: Fix serialisation of derivations to store paths
-            if (metaValue == 0) {
+            if (metaValue == nullptr) {
                 continue;
             }
 

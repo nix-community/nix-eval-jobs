@@ -1,14 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <nix/args.hh>
 #include <nix/file-system.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/lockfile.hh>
+#include <nix/canon-path.hh>
+#include <nix/source-accessor.hh>
 #include <functional>
 #include <map>
 #include <memory>
 #include <set>
-#include <utility>
 
 #include "eval-args.hh"
 
@@ -42,18 +43,20 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
              .labels = {"path"},
              .handler = {&gcRootsDir}});
 
-    addFlag(
-        {.longName = "workers",
-         .description = "number of evaluate workers",
-         .labels = {"workers"},
-         .handler = {[=, this](std::string s) { nrWorkers = std::stoi(s); }}});
+    addFlag({.longName = "workers",
+             .description = "number of evaluate workers",
+             .labels = {"workers"},
+             .handler = {[=, this](const std::string &s) {
+                 nrWorkers = std::stoi(s);
+             }}});
 
     addFlag({.longName = "max-memory-size",
              .description = "maximum evaluation memory size in megabyte "
                             "(4GiB per worker by default)",
              .labels = {"size"},
-             .handler = {
-                 [=, this](std::string s) { maxMemorySize = std::stoi(s); }}});
+             .handler = {[=, this](const std::string &s) {
+                 maxMemorySize = std::stoi(s);
+             }}});
 
     addFlag({.longName = "flake",
              .description = "build a flake",
@@ -89,7 +92,8 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
             "Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
         .category = category,
         .labels = {"input-path", "flake-url"},
-        .handler = {[&](std::string inputPath, std::string flakeRef) {
+        .handler = {[&](const std::string &inputPath,
+                        const std::string &flakeRef) {
             // overriden inputs are unlocked
             lockFlags.allowUnlocked = true;
             lockFlags.inputOverrides.insert_or_assign(
@@ -104,7 +108,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                             "within the top-level flake.",
              .category = category,
              .labels = {"flake-lock-path"},
-             .handler = {[&](std::string lockFilePath) {
+             .handler = {[&](const std::string &lockFilePath) {
                  lockFlags.referenceLockFilePath = {
                      nix::getFSSourceAccessor(),
                      nix::CanonPath(nix::absPath(lockFilePath))};
@@ -115,5 +119,5 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
 }
 
 void MyArgs::parseArgs(char **argv, int argc) {
-    parseCmdline(nix::argvToStrings(argc, argv), 0);
+    parseCmdline(nix::argvToStrings(argc, argv), false);
 }

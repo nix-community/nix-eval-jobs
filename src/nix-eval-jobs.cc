@@ -1,20 +1,18 @@
 #include <nix/config.h> // IWYU pragma: keep
-
 #include <curl/curl.h>
 #include <nix/eval-settings.hh>
 #include <nix/shared.hh>
 #include <nix/sync.hh>
 #include <nix/eval.hh>
 #include <nix/eval-gc.hh>
-#include <nix/signals.hh>
 #include <nix/terminal.hh>
 #include <sys/wait.h>
 #include <nlohmann/json.hpp>
-#include <errno.h>
+#include <cerrno>
 #include <pthread.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <nix/attr-set.hh>
 #include <nix/config.hh>
@@ -28,6 +26,11 @@
 #include <nix/processes.hh>
 #include <nix/ref.hh>
 #include <nix/store-api.hh>
+#include <sys/types.h>
+#include <nix/common-eval-args.hh>
+#include <nix/flake/flake.hh>
+#include <nix/signals.hh>
+#include <nix/signals-impl.hh>
 #include <map>
 #include <condition_variable>
 #include <filesystem>
@@ -51,9 +54,8 @@ using namespace nlohmann;
 
 static MyArgs myArgs;
 
-typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
-                           AutoCloseFD &to, AutoCloseFD &from, MyArgs &args)>
-    Processor;
+using Processor = std::function<void(ref<EvalState> state, Bindings &autoArgs,
+                                     const Channel &channel, MyArgs &args)>;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
@@ -64,6 +66,10 @@ struct Proc {
         Pipe toPipe, fromPipe;
         toPipe.create();
         fromPipe.create();
+
+        to = std::move(toPipe.writeSide);
+        from = std::move(fromPipe.readSide);
+
         auto p = startProcess(
             [&,
              to{std::make_shared<AutoCloseFD>(std::move(fromPipe.writeSide))},
@@ -78,10 +84,14 @@ struct Proc {
                         myArgs.lookupPath, evalStore, fetchSettings,
                         evalSettings);
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);
+                    Channel channel{
+                        .from = from,
+                        .to = to,
+                    };
+                    proc(ref<EvalState>(state), autoArgs, channel, myArgs);
                 } catch (Error &e) {
                     nlohmann::json err;
-                    auto msg = e.msg();
+                    auto &msg = e.msg();
                     err["error"] = nix::filterANSIEscapes(msg, true);
                     printError(msg);
                     if (tryWriteLine(to->get(), err.dump()) < 0) {
@@ -96,12 +106,10 @@ struct Proc {
             },
             ProcessOptions{.allowVfork = false});
 
-        to = std::move(toPipe.writeSide);
-        from = std::move(fromPipe.readSide);
         pid = p;
     }
 
-    ~Proc() {}
+    ~Proc() = default;
 };
 
 // We'd highly prefer using std::thread here; but this won't let us configure
@@ -122,17 +130,21 @@ struct Thread {
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
 
-        if ((s = pthread_attr_init(&attr)) != 0) {
+        s = pthread_attr_init(&attr);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_init");
         }
-        if ((s = pthread_attr_setstacksize(&attr, 64 * 1024 * 1024)) != 0) {
+        s = pthread_attr_setstacksize(&attr,
+                                      static_cast<size_t>(64) * 1024 * 1024);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_setstacksize");
         }
-        if ((s = pthread_create(&thread, &attr, Thread::init,
-                                func.release())) != 0) {
+        s = pthread_create(&thread, &attr, Thread::init, func.release());
+        if (s != 0) {
             throw SysError(s, "calling pthread_launch");
         }
-        if ((s = pthread_attr_destroy(&attr)) != 0) {
+        s = pthread_attr_destroy(&attr);
+        if (s != 0) {
             throw SysError(s, "calling pthread_attr_destroy");
         }
     }
@@ -146,12 +158,12 @@ struct Thread {
     }
 
   private:
-    static void *init(void *ptr) {
+    static auto init(void *ptr) -> void * {
         std::unique_ptr<std::function<void(void)>> func;
         func.reset(static_cast<std::function<void(void)> *>(ptr));
 
         (*func)();
-        return 0;
+        return nullptr;
     }
 };
 
@@ -165,7 +177,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
     pid_t pid = proc.pid.release();
-    while (1) {
+    while (true) {
         int status;
         int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
@@ -211,16 +223,18 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
                         "(possible infinite recursion)",
                         msg);
 #endif
+                default:
+                    throw Error("while %s, evaluation worker got killed by "
+                                "signal %d (%s)",
+                                msg, WTERMSIG(status),
+                                strsignal(WTERMSIG(status)));
                 }
-                throw Error(
-                    "while %s, evaluation worker got killed by signal %d (%s)",
-                    msg, WTERMSIG(status), strsignal(WTERMSIG(status)));
             } // else ignore WIFSTOPPED and WIFCONTINUED
         }
     }
 }
 
-std::string joinAttrPath(json &attrPath) {
+auto joinAttrPath(json &attrPath) -> std::string {
     std::string joined;
     for (auto &element : attrPath) {
         if (!joined.empty()) {
@@ -239,6 +253,8 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
         while (true) {
             if (!proc_.has_value()) {
                 proc_ = std::make_unique<Proc>(worker);
+            }
+            if (!fromReader_.has_value()) {
                 fromReader_ =
                     std::make_unique<LineReader>(proc_.value()->from.release());
             }
@@ -328,7 +344,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
             {
                 auto state(state_.lock());
                 state->active.erase(attrPath);
-                for (auto p : newAttrs) {
+                for (auto &p : newAttrs) {
                     state->todo.insert(p);
                 }
                 wakeup.notify_all();
@@ -341,7 +357,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
     }
 }
 
-int main(int argc, char **argv) {
+auto main(int argc, char **argv) -> int {
 
     /* Prevent undeclared dependencies in the evaluation via
        $NIX_PATH. */
@@ -406,7 +422,7 @@ int main(int argc, char **argv) {
         std::condition_variable wakeup;
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
-                std::bind(collector, std::ref(state_), std::ref(wakeup)));
+                [&state_, &wakeup] { collector(state_, wakeup); });
         }
 
         for (auto &thread : threads)

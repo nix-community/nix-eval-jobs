@@ -1,0 +1,7 @@
+Checks:
+  - -*
+  - bugprone-*
+  - performance-*
+  - modernize-*
+  - cppcoreguidelines-pro-type-cstyle-cast
+UseColor: true

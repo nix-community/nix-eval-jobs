@@ -3,16 +3,18 @@
 // doesn't exist on macOS
 // IWYU pragma: no_include <bits/types/struct_rusage.h>
 
+#include <nix/eval-error.hh>
+#include <nix/pos-idx.hh>
+#include <nix/source-path.hh>
 #include <nix/terminal.hh>
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/installable-flake.hh>
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <nix/attr-set.hh>
-#include <nix/canon-path.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
 #include <nix/eval-inline.hh>
@@ -22,15 +24,15 @@
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
-#include <nix/nixexpr.hh>
+#include <nix/outputs-spec.hh>
 #include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/ref.hh>
 #include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
+#include <nix/ref.hh>
 #include <exception>
 #include <map>
 #include <memory>
@@ -47,9 +49,13 @@
 #include "buffered-io.hh"
 #include "eval-args.hh"
 
-static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
-                                            nix::Bindings &autoArgs,
-                                            MyArgs &args) {
+namespace nix {
+struct Expr;
+} // namespace nix
+
+static auto releaseExprTopLevelValue(nix::EvalState &state,
+                                     nix::Bindings &autoArgs,
+                                     MyArgs &args) -> nix::Value * {
     nix::Value vTop;
 
     if (args.fromArgs) {
@@ -67,11 +73,11 @@ static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
     return vRoot;
 }
 
-static std::string attrPathJoin(nlohmann::json input) {
+static auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
-                           [](std::string ss, std::string s) {
+                           [](const std::string &ss, std::string s) {
                                // Escape token if containing dots
-                               if (s.find(".") != std::string::npos) {
+                               if (s.find('.') != std::string::npos) {
                                    s = "\"" + s + "\"";
                                }
                                return ss.empty() ? s : ss + "." + s;
@@ -79,7 +85,7 @@ static std::string attrPathJoin(nlohmann::json input) {
 }
 
 void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args) {
+            const Channel &channel, MyArgs &args) {
 
     nix::Value *vRoot = [&]() {
         if (args.flake) {
@@ -96,11 +102,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         }
     }();
 
-    LineReader fromReader(from.release());
+    LineReader fromReader(channel.from->release());
 
     while (true) {
         /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(to.get(), "next") < 0) {
+        if (tryWriteLine(channel.to->get(), "next") < 0) {
             return; // main process died
         }
 
@@ -199,7 +205,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             fprintf(stderr, "%s\n", msg);
         }
 
-        if (tryWriteLine(to.get(), reply.dump()) < 0) {
+        if (tryWriteLine(channel.to->get(), reply.dump()) < 0) {
             return; // main process died
         }
 
@@ -211,7 +217,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             break;
     }
 
-    if (tryWriteLine(to.get(), "restart") < 0) {
+    if (tryWriteLine(channel.to->get(), "restart") < 0) {
         return; // main process died
     };
 }

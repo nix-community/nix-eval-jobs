@@ -1,13 +1,15 @@
-#include <string.h>
+#include <cstring>
 #include <unistd.h>
+#include <cerrno>
+#include <cstdlib>
+#include <sys/types.h>
+#include <nix/error.hh>
 #include <nix/signals.hh>
-#include <errno.h>
-#include <stdlib.h>
-#include <error.hh>
+#include <nix/signals-impl.hh>
 
 #include "buffered-io.hh"
 
-[[nodiscard]] int tryWriteLine(int fd, std::string s) {
+[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int {
     s += "\n";
     std::string_view sv{s};
     while (!sv.empty()) {
@@ -26,7 +28,7 @@
 LineReader::LineReader(int fd) {
     stream = fdopen(fd, "r");
     if (!stream) {
-        throw nix::Error("fdopen failed: %s", strerror(errno));
+        throw nix::Error("fdopen(%d) failed: %s", fd, strerror(errno));
     }
 }
 
@@ -35,7 +37,7 @@ LineReader::~LineReader() {
     free(buffer);
 }
 
-LineReader::LineReader(LineReader &&other) {
+LineReader::LineReader(LineReader &&other) noexcept {
     stream = other.stream;
     other.stream = nullptr;
     buffer = other.buffer;
@@ -44,7 +46,7 @@ LineReader::LineReader(LineReader &&other) {
     other.len = 0;
 }
 
-[[nodiscard]] std::string_view LineReader::readLine() {
+[[nodiscard]] auto LineReader::readLine() -> std::string_view {
     ssize_t read = getline(&buffer, &len, stream);
 
     if (read == -1) {
@@ -54,5 +56,5 @@ LineReader::LineReader(LineReader &&other) {
     nix::checkInterrupt();
 
     // Remove trailing newline
-    return std::string_view(buffer, read - 1);
+    return {buffer, static_cast<size_t>(read) - 1};
 }

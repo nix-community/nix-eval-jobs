@@ -2,6 +2,7 @@
 #include <nix/eval.hh>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <string>
 #include <map>
 #include <set>
@@ -23,7 +24,12 @@ struct Drv {
     std::string system;
     std::string drvPath;
 
-    enum class CacheStatus { Local, Cached, NotBuilt, Unknown } cacheStatus;
+    enum class CacheStatus : uint8_t {
+        Local,
+        Cached,
+        NotBuilt,
+        Unknown
+    } cacheStatus;
     std::map<std::string, std::optional<std::string>> outputs;
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;

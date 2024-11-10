@@ -3,15 +3,15 @@
 #include <string>
 #include <string_view>
 
-[[nodiscard]] int tryWriteLine(int fd, std::string s);
+[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int;
 
 class LineReader {
   public:
     LineReader(int fd);
     ~LineReader();
 
-    LineReader(LineReader &&other);
-    [[nodiscard]] std::string_view readLine();
+    LineReader(LineReader &&other) noexcept;
+    [[nodiscard]] auto readLine() -> std::string_view;
 
   private:
     FILE *stream = nullptr;
