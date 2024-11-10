@@ -126,7 +126,7 @@ struct Proc {
 // evaluator under an anemic stack of 0.5MiB has it overflow way too quickly.
 // Hence, we have our own custom Thread struct.
 struct Thread {
-    pthread_t thread; // NOLINT(misc-include-cleaner)
+    pthread_t thread = {}; // NOLINT(misc-include-cleaner)
 
     Thread(const Thread &) = delete;
     Thread(Thread &&) noexcept = default;

@@ -210,7 +210,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
-        struct rusage r; // NOLINT(misc-include-cleaner)
+        struct rusage r = {}; // NOLINT(misc-include-cleaner)
         getrusage(RUSAGE_SELF, &r);
         if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024) {
             break;

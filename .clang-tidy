@@ -15,6 +15,7 @@ Checks:
 
   - cppcoreguidelines-pro-type-cstyle-cast
   - cppcoreguidelines-init-variables
+  - cppcoreguidelines-pro-type-member-init
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True
