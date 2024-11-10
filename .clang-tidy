@@ -2,9 +2,7 @@ Checks:
   - -*
   - bugprone-*
   - performance-*
-  - modernize-use-bool-literals
-  - modernize-deprecated-headers
-  - modernize-return-braced-init-list
-  - modernize-use-nullptr
+  - modernize-*
+  - -modernize-use-trailing-return-type
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

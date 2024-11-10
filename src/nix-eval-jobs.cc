@@ -54,9 +54,8 @@ using namespace nlohmann;
 
 static MyArgs myArgs;
 
-typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
-                           const Channel &channel, MyArgs &args)>
-    Processor;
+using Processor = std::function<void(ref<EvalState> state, Bindings &autoArgs,
+                                     const Channel &channel, MyArgs &args)>;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
@@ -110,7 +109,7 @@ struct Proc {
         pid = p;
     }
 
-    ~Proc() {}
+    ~Proc() = default;
 };
 
 // We'd highly prefer using std::thread here; but this won't let us configure
@@ -164,7 +163,7 @@ struct Thread {
         func.reset(static_cast<std::function<void(void)> *>(ptr));
 
         (*func)();
-        return 0;
+        return nullptr;
     }
 };
 
@@ -423,7 +422,7 @@ int main(int argc, char **argv) {
         std::condition_variable wakeup;
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
-                std::bind(collector, std::ref(state_), std::ref(wakeup)));
+                [&state_, &wakeup] { collector(state_, wakeup); });
         }
 
         for (auto &thread : threads)
