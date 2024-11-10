@@ -4,5 +4,6 @@ Checks:
   - performance-*
   - modernize-*
   - readability-braces-around-statements
+  - readability-else-after-return
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

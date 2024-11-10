@@ -47,15 +47,13 @@ queryCacheStatus(nix::Store &store,
             //  - there's nothing to build
             //  - there's nothing to substitute
             return Drv::CacheStatus::Local;
-        } else {
-            // cacheStatus is Cached if:
-            //  - there's nothing to build
-            //  - there are paths to substitute
-            return Drv::CacheStatus::Cached;
         }
-    } else {
-        return Drv::CacheStatus::NotBuilt;
+        // cacheStatus is Cached if:
+        //  - there's nothing to build
+        //  - there are paths to substitute
+        return Drv::CacheStatus::Cached;
     }
+    return Drv::CacheStatus::NotBuilt;
 }
 
 /* The fields of a derivation that are printed in json form */

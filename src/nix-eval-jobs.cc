@@ -185,52 +185,54 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
             throw Error("BUG: while %s, worker pipe got closed but evaluation "
                         "worker still running?",
                         msg);
-        } else if (rc == -1) {
+        }
+
+        if (rc == -1) {
             kill(pid, SIGKILL);
             throw Error(
                 "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
                 strerror(errno));
-        } else {
-            if (WIFEXITED(status)) {
-                if (WEXITSTATUS(status) == 1) {
-                    throw Error(
-                        "while %s, evaluation worker exited with exit code 1, "
-                        "(possible infinite recursion)",
-                        msg);
-                }
-                throw Error("while %s, evaluation worker exited with %d", msg,
-                            WEXITSTATUS(status));
-            } else if (WIFSIGNALED(status)) {
-                switch (WTERMSIG(status)) {
-                case SIGKILL:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGKILL, "
-                        "maybe "
-                        "memory limit reached?",
-                        msg);
-                    break;
-#ifdef __APPLE__
-                case SIGBUS:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGBUS, "
-                        "(possible infinite recursion)",
-                        msg);
-                    break;
-#else
-                case SIGSEGV:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGSEGV, "
-                        "(possible infinite recursion)",
-                        msg);
-#endif
-                default:
-                    throw Error("while %s, evaluation worker got killed by "
-                                "signal %d (%s)",
-                                msg, WTERMSIG(status),
-                                strsignal(WTERMSIG(status)));
-                }
-            } // else ignore WIFSTOPPED and WIFCONTINUED
         }
+        if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status) == 1) {
+                throw Error(
+                    "while %s, evaluation worker exited with exit code 1, "
+                    "(possible infinite recursion)",
+                    msg);
+            }
+            throw Error("while %s, evaluation worker exited with %d", msg,
+                        WEXITSTATUS(status));
+        }
+
+        if (WIFSIGNALED(status)) {
+            switch (WTERMSIG(status)) {
+            case SIGKILL:
+                throw Error(
+                    "while %s, evaluation worker got killed by SIGKILL, "
+                    "maybe "
+                    "memory limit reached?",
+                    msg);
+                break;
+#ifdef __APPLE__
+            case SIGBUS:
+                throw nix::Error(
+                    "while %s, evaluation worker got killed by SIGBUS, "
+                    "(possible infinite recursion)",
+                    msg);
+                break;
+#else
+            case SIGSEGV:
+                throw Error(
+                    "while %s, evaluation worker got killed by SIGSEGV, "
+                    "(possible infinite recursion)",
+                    msg);
+#endif
+            default:
+                throw Error("while %s, evaluation worker got killed by "
+                            "signal %d (%s)",
+                            msg, WTERMSIG(status), strsignal(WTERMSIG(status)));
+            }
+        } // else ignore WIFSTOPPED and WIFCONTINUED
     }
 }
 
@@ -298,9 +300,8 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                     state->todo.erase(state->todo.begin());
                     state->active.insert(attrPath);
                     break;
-                } else {
-                    state.wait(wakeup);
                 }
+                state.wait(wakeup);
             }
 
             /* Tell the worker to evaluate it. */

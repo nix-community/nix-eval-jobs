@@ -97,9 +97,9 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                 {}, {},    args.lockFlags};
 
             return flake.toValue(*state).first;
-        } else {
-            return releaseExprTopLevelValue(*state, autoArgs, args);
         }
+
+        return releaseExprTopLevelValue(*state, autoArgs, args);
     }();
 
     LineReader fromReader(channel.from->release());
