@@ -8,6 +8,7 @@ Checks:
   - readability-container-size-empty
   - readability-implicit-bool-conversion
   - readability-qualified-auto
+  - readability-container-contains
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
