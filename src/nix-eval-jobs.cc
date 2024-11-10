@@ -150,7 +150,7 @@ struct Thread {
         }
     }
 
-    void join() {
+    void join() const {
         int s;
         s = pthread_join(thread, nullptr);
         if (s != 0) {
