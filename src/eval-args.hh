@@ -18,6 +18,7 @@ class MyArgs : virtual public nix::MixEvalArgs,
                virtual public nix::RootArgs {
   public:
     std::string releaseExpr;
+    std::string applyExpr;
     nix::Path gcRootsDir;
     bool flake = false;
     bool fromArgs = false;

@@ -10,6 +10,7 @@
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/installable-flake.hh>
+#include <nix/value-to-json.hh>
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
 #include <cstdio>
@@ -136,22 +137,45 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             if (v->type() == nix::nAttrs) {
                 auto packageInfo = nix::getDerivation(*state, *v, false);
                 if (packageInfo) {
-                    auto drv = Drv(attrPathS, *state, *packageInfo, args);
-                    reply.update(drv);
+
+                    if (args.applyExpr != "") {
+                        auto applyExpr = state->parseExprFromString(
+                            args.applyExpr, state->rootPath("."));
+
+                        nix::Value vApply;
+                        nix::Value vRes;
+
+                        state->eval(applyExpr, vApply);
+
+                        state->callFunction(vApply, *v, vRes, nix::noPos);
+                        state->forceAttrs(
+                            vRes, nix::noPos,
+                            "apply needs to evaluate to an attrset");
+
+                        nix::NixStringContext context;
+                        std::stringstream ss;
+                        nix::printValueAsJSON(*state, true, vRes, nix::noPos,
+                                              ss, context);
+
+                        reply.update(nlohmann::json::parse(ss.str()));
+                    } else {
+                        auto drv = Drv(attrPathS, *state, *packageInfo, args);
+                        reply.update(drv);
+                    }
 
                     /* Register the derivation as a GC root.  !!! This
                        registers roots for jobs that we may have already
                        done. */
                     if (args.gcRootsDir != "") {
+                        auto localStore =
+                            state->store
+                                .dynamic_pointer_cast<nix::LocalFSStore>();
+                        auto storePath = *packageInfo->queryDrvPath();
+
                         nix::Path root =
                             args.gcRootsDir + "/" +
-                            std::string(nix::baseNameOf(drv.drvPath));
+                            std::string(nix::baseNameOf(storePath.to_string()));
                         if (!nix::pathExists(root)) {
-                            auto localStore =
-                                state->store
-                                    .dynamic_pointer_cast<nix::LocalFSStore>();
-                            auto storePath =
-                                localStore->parseStorePath(drv.drvPath);
                             localStore->addPermRoot(storePath, root);
                         }
                     }
