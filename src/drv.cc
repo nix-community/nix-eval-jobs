@@ -165,9 +165,16 @@ void to_json(nlohmann::json &json, const Drv &drv) {
         json["isCached"] = drv.cacheStatus == Drv::CacheStatus::Cached ||
                            drv.cacheStatus == Drv::CacheStatus::Local;
 
-        json["cacheStatus"] =
-            drv.cacheStatus == Drv::CacheStatus::Cached  ? "cached"
-            : drv.cacheStatus == Drv::CacheStatus::Local ? "local"
-                                                         : "notBuilt";
+        switch (drv.cacheStatus) {
+        case Drv::CacheStatus::Cached:
+            json["cacheStatus"] = "cached";
+            break;
+        case Drv::CacheStatus::Local:
+            json["cacheStatus"] = "local";
+            break;
+        default:
+            json["cacheStatus"] = "notBuilt";
+            break;
+        }
     }
 }
