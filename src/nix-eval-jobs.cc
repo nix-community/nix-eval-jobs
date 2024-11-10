@@ -252,6 +252,8 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
         while (true) {
             if (!proc_.has_value()) {
                 proc_ = std::make_unique<Proc>(worker);
+            }
+            if (!fromReader_.has_value()) {
                 fromReader_ =
                     std::make_unique<LineReader>(proc_.value()->from.release());
             }

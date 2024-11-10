@@ -68,6 +68,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         try {
             for (auto &[outputName, optOutputPath] :
                  packageInfo.queryOutputs(true)) {
+                if (!optOutputPath) {
+                    continue;
+                }
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
             }
@@ -82,6 +85,9 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
             for (auto &[outputName, optOutputPath] :
                  packageInfo.queryOutputs(false)) {
+                if (!optOutputPath) {
+                    continue;
+                }
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
             }
