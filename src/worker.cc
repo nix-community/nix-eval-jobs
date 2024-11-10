@@ -50,9 +50,9 @@ namespace nix {
 struct Expr;
 } // namespace nix
 
-static auto releaseExprTopLevelValue(nix::EvalState &state,
-                                     nix::Bindings &autoArgs,
-                                     MyArgs &args) -> nix::Value * {
+namespace {
+auto releaseExprTopLevelValue(nix::EvalState &state, nix::Bindings &autoArgs,
+                              MyArgs &args) -> nix::Value * {
     nix::Value vTop;
 
     if (args.fromArgs) {
@@ -70,7 +70,7 @@ static auto releaseExprTopLevelValue(nix::EvalState &state,
     return vRoot;
 }
 
-static auto attrPathJoin(nlohmann::json input) -> std::string {
+auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
                            [](const std::string &ss, std::string s) {
                                // Escape token if containing dots
@@ -80,6 +80,7 @@ static auto attrPathJoin(nlohmann::json input) -> std::string {
                                return ss.empty() ? s : ss + "." + s;
                            });
 }
+} // namespace
 
 void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             const Channel &channel, MyArgs &args) {

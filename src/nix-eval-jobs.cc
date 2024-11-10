@@ -56,7 +56,9 @@
 using namespace nix;
 using namespace nlohmann;
 
-static MyArgs myArgs;
+namespace {
+MyArgs myArgs;
+}
 
 using Processor = std::function<void(ref<EvalState> state, Bindings &autoArgs,
                                      const Channel &channel, MyArgs &args)>;

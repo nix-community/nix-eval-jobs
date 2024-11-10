@@ -29,10 +29,11 @@
 #include "drv.hh"
 #include "eval-args.hh"
 
-static auto
-queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::optional<std::string>> &outputs)
-    -> Drv::CacheStatus {
+namespace {
+
+auto queryCacheStatus(nix::Store &store,
+                      std::map<std::string, std::optional<std::string>>
+                          &outputs) -> Drv::CacheStatus {
     uint64_t downloadSize;
     uint64_t narSize;
     nix::StorePathSet willBuild;
@@ -61,7 +62,8 @@ queryCacheStatus(nix::Store &store,
         return Drv::CacheStatus::Cached;
     }
     return Drv::CacheStatus::NotBuilt;
-}
+};
+} // namespace
 
 /* The fields of a derivation that are printed in json form */
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
