@@ -10,7 +10,7 @@ class LineReader {
     LineReader(int fd);
     ~LineReader();
 
-    LineReader(LineReader &&other);
+    LineReader(LineReader &&other) noexcept;
     [[nodiscard]] std::string_view readLine();
 
   private:

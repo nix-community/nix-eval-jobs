@@ -35,7 +35,7 @@ LineReader::~LineReader() {
     free(buffer);
 }
 
-LineReader::LineReader(LineReader &&other) {
+LineReader::LineReader(LineReader &&other) noexcept {
     stream = other.stream;
     other.stream = nullptr;
     buffer = other.buffer;

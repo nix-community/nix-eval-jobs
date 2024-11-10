@@ -90,7 +90,7 @@ struct Proc {
                     proc(ref<EvalState>(state), autoArgs, channel, myArgs);
                 } catch (Error &e) {
                     nlohmann::json err;
-                    auto msg = e.msg();
+                    auto &msg = e.msg();
                     err["error"] = nix::filterANSIEscapes(msg, true);
                     printError(msg);
                     if (tryWriteLine(to->get(), err.dump()) < 0) {
@@ -343,7 +343,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
             {
                 auto state(state_.lock());
                 state->active.erase(attrPath);
-                for (auto p : newAttrs) {
+                for (auto &p : newAttrs) {
                     state->todo.insert(p);
                 }
                 wakeup.notify_all();

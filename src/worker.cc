@@ -69,9 +69,9 @@ static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
 
 static std::string attrPathJoin(nlohmann::json input) {
     return std::accumulate(input.begin(), input.end(), std::string(),
-                           [](std::string ss, std::string s) {
+                           [](const std::string &ss, std::string s) {
                                // Escape token if containing dots
-                               if (s.find(".") != std::string::npos) {
+                               if (s.find('.') != std::string::npos) {
                                    s = "\"" + s + "\"";
                                }
                                return ss.empty() ? s : ss + "." + s;
