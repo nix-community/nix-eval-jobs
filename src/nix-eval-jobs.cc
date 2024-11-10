@@ -56,7 +56,6 @@
 #include "strings-portable.hh"
 
 using namespace nix;
-using namespace nlohmann;
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -183,8 +182,8 @@ struct Thread {
 };
 
 struct State {
-    std::set<json> todo = json::array({json::array()});
-    std::set<json> active;
+    std::set<nlohmann::json> todo = nlohmann::json::array({nlohmann::json::array()});
+    std::set<nlohmann::json> active;
     std::exception_ptr exc;
 };
 
@@ -252,7 +251,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     }
 }
 
-auto joinAttrPath(json &attrPath) -> std::string {
+auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
     std::string joined;
     for (auto &element : attrPath) {
         if (!joined.empty()) {
@@ -289,9 +288,9 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                 continue;
             } else if (s != "next") {
                 try {
-                    auto json = json::parse(s);
+                    auto json = nlohmann::json::parse(s);
                     throw Error("worker error: %s", std::string(json["error"]));
-                } catch (const json::exception &e) {
+                } catch (const nlohmann::json::exception &e) {
                     throw Error(
                         "Received invalid JSON from worker: %s\n json: '%s'",
                         e.what(), s);
@@ -299,7 +298,7 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
             }
 
             /* Wait for a job name to become available. */
-            json attrPath;
+            nlohmann::json attrPath;
 
             while (true) {
                 checkInterrupt();
@@ -333,20 +332,20 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                            joinAttrPath(attrPath) + "'";
                 handleBrokenWorkerPipe(*proc.get(), msg);
             }
-            json response;
+            nlohmann::json response;
             try {
-                response = json::parse(respString);
-            } catch (const json::exception &e) {
+                response = nlohmann::json::parse(respString);
+            } catch (const nlohmann::json::exception &e) {
                 throw Error(
                     "Received invalid JSON from worker: %s\n json: '%s'",
                     e.what(), respString);
             }
 
             /* Handle the response. */
-            std::vector<json> newAttrs;
+            std::vector<nlohmann::json> newAttrs;
             if (response.find("attrs") != response.end()) {
                 for (auto &i : response["attrs"]) {
-                    json newAttr = json(response["attrPath"]);
+                    nlohmann::json newAttr = nlohmann::json(response["attrPath"]);
                     newAttr.emplace_back(i);
                     newAttrs.push_back(newAttr);
                 }
