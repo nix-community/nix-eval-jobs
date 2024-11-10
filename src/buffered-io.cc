@@ -56,5 +56,5 @@ LineReader::LineReader(LineReader &&other) noexcept {
     nix::checkInterrupt();
 
     // Remove trailing newline
-    return std::string_view(buffer, read - 1);
+    return { buffer, static_cast<size_t>(read) - 1 };
 }

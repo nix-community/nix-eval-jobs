@@ -4,5 +4,6 @@ Checks:
   - performance-*
   - modernize-use-bool-literals
   - modernize-deprecated-headers
+  - modernize-return-braced-init-list
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
