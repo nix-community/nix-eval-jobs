@@ -89,7 +89,7 @@ struct Proc {
                         myArgs.lookupPath, evalStore, fetchSettings,
                         evalSettings);
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    Channel channel{
+                    const Channel channel{
                         .from = from,
                         .to = to,
                     };
@@ -181,10 +181,10 @@ struct State {
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
-    pid_t pid = proc.pid.release();
+    const pid_t pid = proc.pid.release();
     while (true) {
         int status;
-        int rc = waitpid(pid, &status, WNOHANG);
+        const int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
             kill(pid, SIGKILL);
             throw Error("BUG: while %s, worker pipe got closed but evaluation "

@@ -13,6 +13,7 @@ Checks:
   - -readability-function-cognitive-complexity
 
   - misc-include-cleaner
+  - misc-const-correctness
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

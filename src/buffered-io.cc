@@ -20,7 +20,7 @@
     std::string_view sv{s};
     while (!sv.empty()) {
         nix::checkInterrupt();
-        ssize_t res = write(fd, sv.data(), sv.size());
+        const ssize_t res = write(fd, sv.data(), sv.size());
         if (res == -1 && errno != EINTR) {
             return -errno;
         }
@@ -53,7 +53,7 @@ LineReader::LineReader(LineReader &&other) noexcept {
 }
 
 [[nodiscard]] auto LineReader::readLine() -> std::string_view {
-    ssize_t read = getline(&buffer, &len, stream);
+    const ssize_t read = getline(&buffer, &len, stream);
 
     if (read == -1) {
         return {}; // Return an empty string_view in case of error

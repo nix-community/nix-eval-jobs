@@ -140,7 +140,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                        registers roots for jobs that we may have already
                        done. */
                     if (args.gcRootsDir.empty()) {
-                        nix::Path root =
+                        const nix::Path root =
                             args.gcRootsDir + "/" +
                             std::string(nix::baseNameOf(drv.drvPath));
                         if (!nix::pathExists(root)) {
