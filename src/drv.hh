@@ -9,8 +9,6 @@
 
 #include "eval-args.hh"
 
-class MyArgs;
-
 namespace nix {
 class EvalState;
 struct PackageInfo;

@@ -19,6 +19,7 @@ Checks:
   - cppcoreguidelines-pro-type-vararg
   - cppcoreguidelines-prefer-member-initializer
   - cppcoreguidelines-misleading-capture-default-by-value
+  - cppcoreguidelines-virtual-class-destructor
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True

@@ -12,6 +12,7 @@ class MyArgs : virtual public nix::MixEvalArgs,
                virtual public nix::MixCommonArgs,
                virtual public nix::RootArgs {
   public:
+    virtual ~MyArgs() = default;
     std::string releaseExpr;
     nix::Path gcRootsDir;
     bool flake = false;
