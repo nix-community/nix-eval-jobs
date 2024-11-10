@@ -83,8 +83,7 @@ auto attrPathJoin(nlohmann::json input) -> std::string {
 }
 } // namespace
 
-void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            const Channel &channel, MyArgs &args) {
+void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel channel, MyArgs &args) {
 
     nix::Value *vRoot = [&]() {
         if (args.flake) {

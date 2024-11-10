@@ -37,20 +37,16 @@ LineReader::LineReader(int fd) : stream(fdopen(fd, "r")) {
     }
 }
 
-LineReader::~LineReader() {
-    fclose(stream);
-    free(buffer);
-}
-
 LineReader::LineReader(LineReader &&other) noexcept
-    : stream(other.stream), buffer(other.buffer), len(other.len) {
+    : stream(other.stream.release()), buffer(other.buffer.release()), len(other.len) {
     other.stream = nullptr;
-    other.buffer = nullptr;
     other.len = 0;
 }
 
 [[nodiscard]] auto LineReader::readLine() -> std::string_view {
-    const ssize_t read = getline(&buffer, &len, stream);
+    char *buf = buffer.release();
+    const ssize_t read = getline(&buf, &len, stream.get());
+    buffer.reset(buf);
 
     if (read == -1) {
         return {}; // Return an empty string_view in case of error
@@ -59,5 +55,6 @@ LineReader::LineReader(LineReader &&other) noexcept
     nix::checkInterrupt();
 
     // Remove trailing newline
-    return {buffer, static_cast<size_t>(read) - 1};
+    char *line = buffer.get();
+    return {line, static_cast<size_t>(read) - 1};
 }

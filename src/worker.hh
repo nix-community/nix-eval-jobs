@@ -17,5 +17,4 @@ struct Channel {
     std::shared_ptr<nix::AutoCloseFD> from, to;
 };
 
-void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            const Channel &channel, MyArgs &args);
+void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs, Channel channel, MyArgs &args);
