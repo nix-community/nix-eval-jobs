@@ -25,6 +25,7 @@
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
+#include <nix/file-descriptor.hh>
 #include <nix/processes.hh>
 #include <nix/ref.hh>
 #include <nix/store-api.hh>
@@ -52,7 +53,7 @@ using namespace nlohmann;
 static MyArgs myArgs;
 
 typedef std::function<void(ref<EvalState> state, Bindings &autoArgs,
-                           AutoCloseFD &to, AutoCloseFD &from, MyArgs &args)>
+                           const Channel &channel, MyArgs &args)>
     Processor;
 
 /* Auto-cleanup of fork's process and fds. */
@@ -64,6 +65,10 @@ struct Proc {
         Pipe toPipe, fromPipe;
         toPipe.create();
         fromPipe.create();
+
+        to = std::move(toPipe.writeSide);
+        from = std::move(fromPipe.readSide);
+
         auto p = startProcess(
             [&,
              to{std::make_shared<AutoCloseFD>(std::move(fromPipe.writeSide))},
@@ -78,7 +83,11 @@ struct Proc {
                         myArgs.lookupPath, evalStore, fetchSettings,
                         evalSettings);
                     Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    proc(ref<EvalState>(state), autoArgs, *to, *from, myArgs);
+                    Channel channel{
+                        .from = from,
+                        .to = to,
+                    };
+                    proc(ref<EvalState>(state), autoArgs, channel, myArgs);
                 } catch (Error &e) {
                     nlohmann::json err;
                     auto msg = e.msg();
@@ -96,8 +105,6 @@ struct Proc {
             },
             ProcessOptions{.allowVfork = false});
 
-        to = std::move(toPipe.writeSide);
-        from = std::move(fromPipe.readSide);
         pid = p;
     }
 

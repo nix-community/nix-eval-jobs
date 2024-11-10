@@ -79,7 +79,7 @@ static std::string attrPathJoin(nlohmann::json input) {
 }
 
 void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args) {
+            const Channel &channel, MyArgs &args) {
 
     nix::Value *vRoot = [&]() {
         if (args.flake) {
@@ -96,11 +96,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         }
     }();
 
-    LineReader fromReader(from.release());
+    LineReader fromReader(channel.from->release());
 
     while (true) {
         /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(to.get(), "next") < 0) {
+        if (tryWriteLine(channel.to->get(), "next") < 0) {
             return; // main process died
         }
 
@@ -199,7 +199,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             fprintf(stderr, "%s\n", msg);
         }
 
-        if (tryWriteLine(to.get(), reply.dump()) < 0) {
+        if (tryWriteLine(channel.to->get(), reply.dump()) < 0) {
             return; // main process died
         }
 
@@ -211,7 +211,7 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             break;
     }
 
-    if (tryWriteLine(to.get(), "restart") < 0) {
+    if (tryWriteLine(channel.to->get(), "restart") < 0) {
         return; // main process died
     };
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <nix/shared.hh>
 #include <nix/eval.hh>
 
@@ -13,5 +14,9 @@ class EvalState;
 template <typename T> class ref;
 } // namespace nix
 
+struct Channel {
+    std::shared_ptr<nix::AutoCloseFD> from, to;
+};
+
 void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            nix::AutoCloseFD &to, nix::AutoCloseFD &from, MyArgs &args);
+            const Channel &channel, MyArgs &args);
