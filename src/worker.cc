@@ -5,7 +5,6 @@
 
 #include <nix/eval-error.hh>
 #include <nix/pos-idx.hh>
-#include <nix/source-path.hh>
 #include <nix/terminal.hh>
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
@@ -13,36 +12,35 @@
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
 #include <cstdio>
-#include <cstdlib>
+#include <iostream>
+
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants this header rather than the C++ version
+#include <stdlib.h>
+// NOLINTEND(modernize-deprecated-headers)
+
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
-#include <nix/eval-inline.hh>
 #include <nix/eval.hh>
-#include <nix/file-descriptor.hh>
 #include <nix/file-system.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
 #include <nix/outputs-spec.hh>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
 #include <nix/ref.hh>
 #include <exception>
-#include <map>
-#include <memory>
 #include <numeric>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include "worker.hh"
 #include "drv.hh"
@@ -53,9 +51,9 @@ namespace nix {
 struct Expr;
 } // namespace nix
 
-static auto releaseExprTopLevelValue(nix::EvalState &state,
-                                     nix::Bindings &autoArgs,
-                                     MyArgs &args) -> nix::Value * {
+namespace {
+auto releaseExprTopLevelValue(nix::EvalState &state, nix::Bindings &autoArgs,
+                              MyArgs &args) -> nix::Value * {
     nix::Value vTop;
 
     if (args.fromArgs) {
@@ -66,14 +64,14 @@ static auto releaseExprTopLevelValue(nix::EvalState &state,
         state.evalFile(lookupFileArg(state, args.releaseExpr), vTop);
     }
 
-    auto vRoot = state.allocValue();
+    auto *vRoot = state.allocValue();
 
     state.autoCallFunction(autoArgs, vTop, *vRoot);
 
     return vRoot;
 }
 
-static auto attrPathJoin(nlohmann::json input) -> std::string {
+auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
                            [](const std::string &ss, std::string s) {
                                // Escape token if containing dots
@@ -83,9 +81,18 @@ static auto attrPathJoin(nlohmann::json input) -> std::string {
                                return ss.empty() ? s : ss + "." + s;
                            });
 }
+} // namespace
 
-void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
-            const Channel &channel, MyArgs &args) {
+void worker(
+    MyArgs &args,
+    nix::AutoCloseFD &to, // NOLINT(bugprone-easily-swappable-parameters)
+    nix::AutoCloseFD &from) {
+
+    auto evalStore = args.evalStoreUrl ? nix::openStore(*args.evalStoreUrl)
+                                       : nix::openStore();
+    auto state = nix::make_ref<nix::EvalState>(
+        args.lookupPath, evalStore, nix::fetchSettings, nix::evalSettings);
+    nix::Bindings &autoArgs = *args.getAutoArgs(*state);
 
     nix::Value *vRoot = [&]() {
         if (args.flake) {
@@ -97,16 +104,16 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                 {}, {},    args.lockFlags};
 
             return flake.toValue(*state).first;
-        } else {
-            return releaseExprTopLevelValue(*state, autoArgs, args);
         }
+
+        return releaseExprTopLevelValue(*state, autoArgs, args);
     }();
 
-    LineReader fromReader(channel.from->release());
+    LineReader fromReader(from.release());
 
     while (true) {
         /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(channel.to->get(), "next") < 0) {
+        if (tryWriteLine(to.get(), "next") < 0) {
             return; // main process died
         }
 
@@ -115,8 +122,8 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             break;
         }
         if (!nix::hasPrefix(s, "do ")) {
-            fprintf(stderr, "worker error: received invalid command '%s'\n",
-                    s.data());
+            std::cerr << "worker error: received invalid command '" << s
+                      << "'\n";
             abort();
         }
         auto path = nlohmann::json::parse(s.substr(3));
@@ -126,11 +133,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
         nlohmann::json reply =
             nlohmann::json{{"attr", attrPathS}, {"attrPath", path}};
         try {
-            auto vTmp =
+            auto *vTmp =
                 nix::findAlongAttrPath(*state, attrPathS, autoArgs, *vRoot)
                     .first;
 
-            auto v = state->allocValue();
+            auto *v = state->allocValue();
             state->autoCallFunction(autoArgs, *vTmp, *v);
 
             if (v->type() == nix::nAttrs) {
@@ -142,8 +149,8 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                     /* Register the derivation as a GC root.  !!! This
                        registers roots for jobs that we may have already
                        done. */
-                    if (args.gcRootsDir != "") {
-                        nix::Path root =
+                    if (args.gcRootsDir.empty()) {
+                        const nix::Path root =
                             args.gcRootsDir + "/" +
                             std::string(nix::baseNameOf(drv.drvPath));
                         if (!nix::pathExists(root)) {
@@ -159,8 +166,8 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                     auto attrs = nlohmann::json::array();
                     bool recurse =
                         args.forceRecurse ||
-                        path.size() == 0; // Dont require `recurseForDerivations
-                                          // = true;` for top-level attrset
+                        path.empty(); // Dont require `recurseForDerivations
+                                      // = true;` for top-level attrset
 
                     for (auto &i :
                          v->attrs()->lexicographicOrder(state->symbols)) {
@@ -169,17 +176,18 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
 
                         if (name == "recurseForDerivations" &&
                             !args.forceRecurse) {
-                            auto attrv =
+                            const auto *attrv =
                                 v->attrs()->get(state->sRecurseForDerivations);
                             recurse = state->forceBool(
                                 *attrv->value, attrv->pos,
                                 "while evaluating recurseForDerivations");
                         }
                     }
-                    if (recurse)
+                    if (recurse) {
                         reply["attrs"] = std::move(attrs);
-                    else
+                    } else {
                         reply["attrs"] = nlohmann::json::array();
+                    }
                 }
             } else {
                 // We ignore everything that cannot be build
@@ -196,28 +204,31 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             reply["error"] = nix::filterANSIEscapes(msg, true);
             // Don't forget to print it into the STDERR log, this is
             // what's shown in the Hydra UI.
-            fprintf(stderr, "%s\n", msg.c_str());
+            std::cerr << msg << "\n";
         } catch (
             const std::exception &e) { // FIXME: for some reason the catch block
                                        // above, doesn't trigger on macOS (?)
-            auto msg = e.what();
+            const auto *msg = e.what();
             reply["error"] = nix::filterANSIEscapes(msg, true);
-            fprintf(stderr, "%s\n", msg);
+            std::cerr << msg << '\n';
         }
 
-        if (tryWriteLine(channel.to->get(), reply.dump()) < 0) {
+        if (tryWriteLine(to.get(), reply.dump()) < 0) {
             return; // main process died
         }
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
-        struct rusage r;
+        struct rusage r = {}; // NOLINT(misc-include-cleaner)
         getrusage(RUSAGE_SELF, &r);
-        if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024)
+        const size_t maxrss =
+            r.ru_maxrss; // NOLINT(cppcoreguidelines-pro-type-union-access)
+        if (maxrss > args.maxMemorySize * 1024) {
             break;
+        }
     }
 
-    if (tryWriteLine(channel.to->get(), "restart") < 0) {
+    if (tryWriteLine(to.get(), "restart") < 0) {
         return; // main process died
     };
 }

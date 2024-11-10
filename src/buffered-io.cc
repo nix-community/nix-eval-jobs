@@ -2,19 +2,27 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstdlib>
-#include <sys/types.h>
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants these headers rather than the C++ version
+#include <stdio.h>
+#include <string.h>
+// NOLINTEND(modernize-deprecated-headers)
+#include <cstdio>
 #include <nix/error.hh>
 #include <nix/signals.hh>
 #include <nix/signals-impl.hh>
+#include <string>
+#include <string_view>
 
 #include "buffered-io.hh"
+#include "strings-portable.hh"
 
 [[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int {
     s += "\n";
     std::string_view sv{s};
     while (!sv.empty()) {
         nix::checkInterrupt();
-        ssize_t res = write(fd, sv.data(), sv.size());
+        const ssize_t res = write(fd, sv.data(), sv.size());
         if (res == -1 && errno != EINTR) {
             return -errno;
         }
@@ -25,29 +33,23 @@
     return 0;
 }
 
-LineReader::LineReader(int fd) {
-    stream = fdopen(fd, "r");
-    if (!stream) {
-        throw nix::Error("fdopen(%d) failed: %s", fd, strerror(errno));
+LineReader::LineReader(int fd) : stream(fdopen(fd, "r")) {
+    if (stream == nullptr) {
+        throw nix::Error("fdopen(%d) failed: %s", fd, get_error_name(errno));
     }
 }
 
-LineReader::~LineReader() {
-    fclose(stream);
-    free(buffer);
-}
-
-LineReader::LineReader(LineReader &&other) noexcept {
-    stream = other.stream;
+LineReader::LineReader(LineReader &&other) noexcept
+    : stream(other.stream.release()), buffer(other.buffer.release()),
+      len(other.len) {
     other.stream = nullptr;
-    buffer = other.buffer;
-    other.buffer = nullptr;
-    len = other.len;
     other.len = 0;
 }
 
 [[nodiscard]] auto LineReader::readLine() -> std::string_view {
-    ssize_t read = getline(&buffer, &len, stream);
+    char *buf = buffer.release();
+    const ssize_t read = getline(&buf, &len, stream.get());
+    buffer.reset(buf);
 
     if (read == -1) {
         return {}; // Return an empty string_view in case of error
@@ -56,5 +58,6 @@ LineReader::LineReader(LineReader &&other) noexcept {
     nix::checkInterrupt();
 
     // Remove trailing newline
-    return {buffer, static_cast<size_t>(read) - 1};
+    char *line = buffer.get();
+    return {line, static_cast<size_t>(read) - 1};
 }

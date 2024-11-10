@@ -3,7 +3,8 @@ src = [
   'eval-args.cc',
   'drv.cc',
   'buffered-io.cc',
-  'worker.cc'
+  'worker.cc',
+  'strings-portable.cc'
 ]
 
 cc = meson.get_compiler('cpp')

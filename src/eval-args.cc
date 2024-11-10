@@ -5,11 +5,15 @@
 #include <nix/flake/flake.hh>
 #include <nix/flake/lockfile.hh>
 #include <nix/canon-path.hh>
+#include <nix/common-args.hh>
+#include <nix/common-eval-args.hh>
 #include <nix/source-accessor.hh>
-#include <functional>
+#include <nix/flake/flakeref.hh>
 #include <map>
-#include <memory>
 #include <set>
+#include <string>
+#include <iostream>
+#include <iomanip>
 
 #include "eval-args.hh"
 
@@ -18,15 +22,16 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .longName = "help",
         .description = "show usage information",
         .handler = {[&]() {
-            printf("USAGE: nix-eval-jobs [options] expr\n\n");
+            std::cout << "USAGE: nix-eval-jobs [options] expr\n\n";
             for (const auto &[name, flag] : longFlags) {
-                if (hiddenCategories.count(flag->category)) {
+                if (hiddenCategories.contains(flag->category)) {
                     continue;
                 }
-                printf("  --%-20s %s\n", name.c_str(),
-                       flag->description.c_str());
+                std::cout << "  --" << std::left << std::setw(20) << name << " "
+                          << flag->description << "\n";
             }
-            ::exit(0);
+
+            ::exit(0); // NOLINT(concurrency-mt-unsafe)
         }},
     });
 
@@ -46,15 +51,14 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     addFlag({.longName = "workers",
              .description = "number of evaluate workers",
              .labels = {"workers"},
-             .handler = {[=, this](const std::string &s) {
-                 nrWorkers = std::stoi(s);
-             }}});
+             .handler = {
+                 [this](const std::string &s) { nrWorkers = std::stoi(s); }}});
 
     addFlag({.longName = "max-memory-size",
              .description = "maximum evaluation memory size in megabyte "
                             "(4GiB per worker by default)",
              .labels = {"size"},
-             .handler = {[=, this](const std::string &s) {
+             .handler = {[this](const std::string &s) {
                  maxMemorySize = std::stoi(s);
              }}});
 

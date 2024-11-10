@@ -12,6 +12,12 @@
 #include <pthread.h>
 #include <csignal>
 #include <cstdlib>
+// NOLINTBEGIN(modernize-deprecated-headers)
+// misc-include-cleaner wants these header rather than the C++ versions
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+// NOLINTEND(modernize-deprecated-headers)
 #include <cstring>
 #include <unistd.h>
 #include <nix/attr-set.hh>
@@ -21,7 +27,6 @@
 #include <nix/globals.hh>
 #include <nix/logging.hh>
 #include <nlohmann/detail/iterators/iter_impl.hpp>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/processes.hh>
 #include <nix/ref.hh>
@@ -31,7 +36,7 @@
 #include <nix/flake/flake.hh>
 #include <nix/signals.hh>
 #include <nix/signals-impl.hh>
-#include <map>
+#include <nix/fmt.hh>
 #include <condition_variable>
 #include <filesystem>
 #include <exception>
@@ -44,56 +49,51 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <span>
 
 #include "eval-args.hh"
 #include "buffered-io.hh"
 #include "worker.hh"
+#include "strings-portable.hh"
 
-using namespace nix;
-using namespace nlohmann;
+namespace {
+MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+}
 
-static MyArgs myArgs;
-
-using Processor = std::function<void(ref<EvalState> state, Bindings &autoArgs,
-                                     const Channel &channel, MyArgs &args)>;
+using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
+                                     nix::AutoCloseFD &from)>;
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
-    AutoCloseFD to, from;
-    Pid pid;
+    nix::AutoCloseFD to, from;
+    nix::Pid pid;
 
-    Proc(const Processor &proc) {
-        Pipe toPipe, fromPipe;
+    Proc(const Proc &) = delete;
+    Proc(Proc &&) = delete;
+    auto operator=(const Proc &) -> Proc & = delete;
+    auto operator=(Proc &&) -> Proc & = delete;
+
+    explicit Proc(const Processor &proc) {
+        nix::Pipe toPipe;
+        nix::Pipe fromPipe;
         toPipe.create();
         fromPipe.create();
-
-        to = std::move(toPipe.writeSide);
-        from = std::move(fromPipe.readSide);
-
         auto p = startProcess(
             [&,
-             to{std::make_shared<AutoCloseFD>(std::move(fromPipe.writeSide))},
-             from{
-                 std::make_shared<AutoCloseFD>(std::move(toPipe.readSide))}]() {
-                debug("created worker process %d", getpid());
+             to{std::make_shared<nix::AutoCloseFD>(
+                 std::move(fromPipe.writeSide))},
+             from{std::make_shared<nix::AutoCloseFD>(
+                 std::move(toPipe.readSide))}]() {
+                nix::logger->log(
+                    nix::lvlDebug,
+                    nix::fmt("created worker process %d", getpid()));
                 try {
-                    auto evalStore = myArgs.evalStoreUrl
-                                         ? openStore(*myArgs.evalStoreUrl)
-                                         : openStore();
-                    auto state = std::make_shared<EvalState>(
-                        myArgs.lookupPath, evalStore, fetchSettings,
-                        evalSettings);
-                    Bindings &autoArgs = *myArgs.getAutoArgs(*state);
-                    Channel channel{
-                        .from = from,
-                        .to = to,
-                    };
-                    proc(ref<EvalState>(state), autoArgs, channel, myArgs);
-                } catch (Error &e) {
+                    proc(myArgs, *to, *from);
+                } catch (nix::Error &e) {
                     nlohmann::json err;
-                    auto &msg = e.msg();
+                    const auto &msg = e.msg();
                     err["error"] = nix::filterANSIEscapes(msg, true);
-                    printError(msg);
+                    nix::logger->log(nix::lvlError, msg);
                     if (tryWriteLine(to->get(), err.dump()) < 0) {
                         return; // main process died
                     };
@@ -104,8 +104,10 @@ struct Proc {
                     }
                 }
             },
-            ProcessOptions{.allowVfork = false});
+            nix::ProcessOptions{.allowVfork = false});
 
+        to = std::move(toPipe.writeSide);
+        from = std::move(fromPipe.readSide);
         pid = p;
     }
 
@@ -119,41 +121,42 @@ struct Proc {
 // evaluator under an anemic stack of 0.5MiB has it overflow way too quickly.
 // Hence, we have our own custom Thread struct.
 struct Thread {
-    pthread_t thread;
+    pthread_t thread = {}; // NOLINT(misc-include-cleaner)
 
     Thread(const Thread &) = delete;
     Thread(Thread &&) noexcept = default;
+    ~Thread() = default;
+    auto operator=(const Thread &) -> Thread & = delete;
+    auto operator=(Thread &&) -> Thread & = delete;
 
-    Thread(std::function<void(void)> f) {
-        int s;
-        pthread_attr_t attr;
+    explicit Thread(std::function<void(void)> f) {
+        pthread_attr_t attr = {}; // NOLINT(misc-include-cleaner)
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
 
-        s = pthread_attr_init(&attr);
+        int s = pthread_attr_init(&attr);
         if (s != 0) {
-            throw SysError(s, "calling pthread_attr_init");
+            throw nix::SysError(s, "calling pthread_attr_init");
         }
         s = pthread_attr_setstacksize(&attr,
                                       static_cast<size_t>(64) * 1024 * 1024);
         if (s != 0) {
-            throw SysError(s, "calling pthread_attr_setstacksize");
+            throw nix::SysError(s, "calling pthread_attr_setstacksize");
         }
         s = pthread_create(&thread, &attr, Thread::init, func.release());
         if (s != 0) {
-            throw SysError(s, "calling pthread_launch");
+            throw nix::SysError(s, "calling pthread_launch");
         }
         s = pthread_attr_destroy(&attr);
         if (s != 0) {
-            throw SysError(s, "calling pthread_attr_destroy");
+            throw nix::SysError(s, "calling pthread_attr_destroy");
         }
     }
 
-    void join() {
-        int s;
-        s = pthread_join(thread, nullptr);
+    void join() const {
+        const int s = pthread_join(thread, nullptr);
         if (s != 0) {
-            throw SysError(s, "calling pthread_join");
+            throw nix::SysError(s, "calling pthread_join");
         }
     }
 
@@ -168,73 +171,78 @@ struct Thread {
 };
 
 struct State {
-    std::set<json> todo = json::array({json::array()});
-    std::set<json> active;
+    std::set<nlohmann::json> todo =
+        nlohmann::json::array({nlohmann::json::array()});
+    std::set<nlohmann::json> active;
     std::exception_ptr exc;
 };
 
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
-    pid_t pid = proc.pid.release();
+    const pid_t pid = proc.pid.release();
     while (true) {
-        int status;
-        int rc = waitpid(pid, &status, WNOHANG);
+        int status = 0;
+        const int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
             kill(pid, SIGKILL);
-            throw Error("BUG: while %s, worker pipe got closed but evaluation "
-                        "worker still running?",
-                        msg);
-        } else if (rc == -1) {
-            kill(pid, SIGKILL);
-            throw Error(
-                "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
-                strerror(errno));
-        } else {
-            if (WIFEXITED(status)) {
-                if (WEXITSTATUS(status) == 1) {
-                    throw Error(
-                        "while %s, evaluation worker exited with exit code 1, "
-                        "(possible infinite recursion)",
-                        msg);
-                }
-                throw Error("while %s, evaluation worker exited with %d", msg,
-                            WEXITSTATUS(status));
-            } else if (WIFSIGNALED(status)) {
-                switch (WTERMSIG(status)) {
-                case SIGKILL:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGKILL, "
-                        "maybe "
-                        "memory limit reached?",
-                        msg);
-                    break;
-#ifdef __APPLE__
-                case SIGBUS:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGBUS, "
-                        "(possible infinite recursion)",
-                        msg);
-                    break;
-#else
-                case SIGSEGV:
-                    throw Error(
-                        "while %s, evaluation worker got killed by SIGSEGV, "
-                        "(possible infinite recursion)",
-                        msg);
-#endif
-                default:
-                    throw Error("while %s, evaluation worker got killed by "
-                                "signal %d (%s)",
-                                msg, WTERMSIG(status),
-                                strsignal(WTERMSIG(status)));
-                }
-            } // else ignore WIFSTOPPED and WIFCONTINUED
+            throw nix::Error(
+                "BUG: while %s, worker pipe got closed but evaluation "
+                "worker still running?",
+                msg);
         }
+
+        if (rc == -1) {
+            kill(pid, SIGKILL);
+            throw nix::Error(
+                "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
+                get_error_name(errno));
+        }
+        if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status) == 1) {
+                throw nix::Error(
+                    "while %s, evaluation worker exited with exit code 1, "
+                    "(possible infinite recursion)",
+                    msg);
+            }
+            throw nix::Error("while %s, evaluation worker exited with %d", msg,
+                             WEXITSTATUS(status));
+        }
+
+        if (WIFSIGNALED(status)) {
+            switch (WTERMSIG(status)) {
+            case SIGKILL:
+                throw nix::Error(
+                    "while %s, evaluation worker got killed by SIGKILL, "
+                    "maybe "
+                    "memory limit reached?",
+                    msg);
+                break;
+#ifdef __APPLE__
+            case SIGBUS:
+                throw nix::Error(
+                    "while %s, evaluation worker got killed by SIGBUS, "
+                    "(possible infinite recursion)",
+                    msg);
+                break;
+#else
+            case SIGSEGV:
+                throw nix::Error(
+                    "while %s, evaluation worker got killed by SIGSEGV, "
+                    "(possible infinite recursion)",
+                    msg);
+#endif
+            default:
+                throw nix::Error("while %s, evaluation worker got killed by "
+                                 "signal %d (%s)",
+                                 msg, WTERMSIG(status),
+                                 get_signal_name(WTERMSIG(status)));
+            }
+        } // else ignore WIFSTOPPED and WIFCONTINUED
     }
 }
 
-auto joinAttrPath(json &attrPath) -> std::string {
+auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
     std::string joined;
     for (auto &element : attrPath) {
         if (!joined.empty()) {
@@ -245,7 +253,7 @@ auto joinAttrPath(json &attrPath) -> std::string {
     return joined;
 }
 
-void collector(Sync<State> &state_, std::condition_variable &wakeup) {
+void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
     try {
         std::optional<std::unique_ptr<Proc>> proc_;
         std::optional<std::unique_ptr<LineReader>> fromReader_;
@@ -271,20 +279,21 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                 continue;
             } else if (s != "next") {
                 try {
-                    auto json = json::parse(s);
-                    throw Error("worker error: %s", (std::string)json["error"]);
-                } catch (const json::exception &e) {
-                    throw Error(
+                    auto json = nlohmann::json::parse(s);
+                    throw nix::Error("worker error: %s",
+                                     std::string(json["error"]));
+                } catch (const nlohmann::json::exception &e) {
+                    throw nix::Error(
                         "Received invalid JSON from worker: %s\n json: '%s'",
                         e.what(), s);
                 }
             }
 
             /* Wait for a job name to become available. */
-            json attrPath;
+            nlohmann::json attrPath;
 
             while (true) {
-                checkInterrupt();
+                nix::checkInterrupt();
                 auto state(state_.lock());
                 if ((state->todo.empty() && state->active.empty()) ||
                     state->exc) {
@@ -298,8 +307,8 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                     state->todo.erase(state->todo.begin());
                     state->active.insert(attrPath);
                     break;
-                } else
-                    state.wait(wakeup);
+                }
+                state.wait(wakeup);
             }
 
             /* Tell the worker to evaluate it. */
@@ -315,20 +324,21 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                            joinAttrPath(attrPath) + "'";
                 handleBrokenWorkerPipe(*proc.get(), msg);
             }
-            json response;
+            nlohmann::json response;
             try {
-                response = json::parse(respString);
-            } catch (const json::exception &e) {
-                throw Error(
+                response = nlohmann::json::parse(respString);
+            } catch (const nlohmann::json::exception &e) {
+                throw nix::Error(
                     "Received invalid JSON from worker: %s\n json: '%s'",
                     e.what(), respString);
             }
 
             /* Handle the response. */
-            std::vector<json> newAttrs;
+            std::vector<nlohmann::json> newAttrs;
             if (response.find("attrs") != response.end()) {
                 for (auto &i : response["attrs"]) {
-                    json newAttr = json(response["attrPath"]);
+                    nlohmann::json newAttr =
+                        nlohmann::json(response["attrPath"]);
                     newAttr.emplace_back(i);
                     newAttrs.push_back(newAttr);
                 }
@@ -361,10 +371,10 @@ auto main(int argc, char **argv) -> int {
 
     /* Prevent undeclared dependencies in the evaluation via
        $NIX_PATH. */
-    unsetenv("NIX_PATH");
+    unsetenv("NIX_PATH"); // NOLINT(concurrency-mt-unsafe)
 
     /* We are doing the garbage collection by killing forks */
-    setenv("GC_DONT_GC", "1", 1);
+    setenv("GC_DONT_GC", "1", 1); // NOLINT(concurrency-mt-unsafe)
 
     /* Because of an objc quirk[1], calling curl_global_init for the first time
        after fork() will always result in a crash.
@@ -379,43 +389,47 @@ auto main(int argc, char **argv) -> int {
     */
     curl_global_init(CURL_GLOBAL_ALL);
 
-    return handleExceptions(argv[0], [&]() {
-        initNix();
-        initGC();
-        flake::initLib(flakeSettings);
+    auto args = std::span(argv, argc);
+
+    return nix::handleExceptions(args[0], [&]() {
+        nix::initNix();
+        nix::initGC();
+        nix::flake::initLib(nix::flakeSettings);
 
         myArgs.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
          * causing "unexpected EOF" during eval */
-        settings.builders = "";
+        nix::settings.builders = "";
 
         /* Prevent access to paths outside of the Nix search path and
            to the environment. */
-        evalSettings.restrictEval = false;
+        nix::evalSettings.restrictEval = false;
 
         /* When building a flake, use pure evaluation (no access to
            'getEnv', 'currentSystem' etc. */
         if (myArgs.impure) {
-            evalSettings.pureEval = false;
+            nix::evalSettings.pureEval = false;
         } else if (myArgs.flake) {
-            evalSettings.pureEval = true;
+            nix::evalSettings.pureEval = true;
         }
 
-        if (myArgs.releaseExpr == "")
-            throw UsageError("no expression specified");
+        if (myArgs.releaseExpr.empty()) {
+            throw nix::UsageError("no expression specified");
+        }
 
-        if (myArgs.gcRootsDir == "") {
-            printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
+        if (myArgs.gcRootsDir.empty()) {
+            nix::logger->log(nix::lvlError,
+                             "warning: `--gc-roots-dir' not specified");
         } else {
             myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
         }
 
         if (myArgs.showTrace) {
-            loggerSettings.showTrace.assign(true);
+            nix::loggerSettings.showTrace.assign(true);
         }
 
-        Sync<State> state_;
+        nix::Sync<State> state_;
 
         /* Start a collector thread per worker process. */
         std::vector<Thread> threads;
@@ -425,12 +439,14 @@ auto main(int argc, char **argv) -> int {
                 [&state_, &wakeup] { collector(state_, wakeup); });
         }
 
-        for (auto &thread : threads)
+        for (auto &thread : threads) {
             thread.join();
+        }
 
         auto state(state_.lock());
 
-        if (state->exc)
+        if (state->exc) {
             std::rethrow_exception(state->exc);
+        }
     });
 }

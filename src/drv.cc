@@ -3,11 +3,11 @@
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
+#include <nix/config.hh>
 #include <nix/derivations.hh>
 #include <nix/get-drvs.hh>
 #include <nix/derived-path-map.hh>
 #include <nix/eval.hh>
-#include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/path.hh>
@@ -17,20 +17,28 @@
 #include <nix/eval-error.hh>
 #include <nix/experimental-features.hh>
 #include <nix/pos-idx.hh>
+#include <cstdint>
+#include <string>
 #include <exception>
 #include <sstream>
 #include <vector>
-#include <memory>
+#include <optional>
+#include <map>
+#include <set>
 
 #include "drv.hh"
 #include "eval-args.hh"
 
-static auto
-queryCacheStatus(nix::Store &store,
-                 std::map<std::string, std::optional<std::string>> &outputs)
-    -> Drv::CacheStatus {
-    uint64_t downloadSize, narSize;
-    nix::StorePathSet willBuild, willSubstitute, unknown;
+namespace {
+
+auto queryCacheStatus(nix::Store &store,
+                      std::map<std::string, std::optional<std::string>>
+                          &outputs) -> Drv::CacheStatus {
+    uint64_t downloadSize = 0;
+    uint64_t narSize = 0;
+    nix::StorePathSet willBuild;
+    nix::StorePathSet willSubstitute;
+    nix::StorePathSet unknown;
 
     std::vector<nix::StorePathWithOutputs> paths;
     for (auto const &[key, val] : outputs) {
@@ -47,16 +55,15 @@ queryCacheStatus(nix::Store &store,
             //  - there's nothing to build
             //  - there's nothing to substitute
             return Drv::CacheStatus::Local;
-        } else {
-            // cacheStatus is Cached if:
-            //  - there's nothing to build
-            //  - there are paths to substitute
-            return Drv::CacheStatus::Cached;
         }
-    } else {
-        return Drv::CacheStatus::NotBuilt;
+        // cacheStatus is Cached if:
+        //  - there's nothing to build
+        //  - there are paths to substitute
+        return Drv::CacheStatus::Cached;
     }
-}
+    return Drv::CacheStatus::NotBuilt;
+};
+} // namespace
 
 /* The fields of a derivation that are printed in json form */
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
@@ -104,11 +111,11 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
     if (args.meta) {
         nlohmann::json meta_;
-        for (auto &metaName : packageInfo.queryMetaNames()) {
+        for (const auto &metaName : packageInfo.queryMetaNames()) {
             nix::NixStringContext context;
             std::stringstream ss;
 
-            auto metaValue = packageInfo.queryMeta(metaName);
+            auto *metaValue = packageInfo.queryMeta(metaName);
             // Skip non-serialisable types
             // TODO: Fix serialisation of derivations to store paths
             if (metaValue == nullptr) {
@@ -133,7 +140,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
     auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
     for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
         std::set<std::string> inputDrvOutputs;
-        for (auto &outputName : inputNode.value) {
+        for (const auto &outputName : inputNode.value) {
             inputDrvOutputs.insert(outputName);
         }
         inputDrvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
@@ -144,7 +151,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
 void to_json(nlohmann::json &json, const Drv &drv) {
     std::map<std::string, nlohmann::json> outputsJson;
-    for (auto &[name, optPath] : drv.outputs) {
+    for (const auto &[name, optPath] : drv.outputs) {
         outputsJson[name] =
             optPath ? nlohmann::json(*optPath) : nlohmann::json(nullptr);
     }
@@ -164,9 +171,16 @@ void to_json(nlohmann::json &json, const Drv &drv) {
         json["isCached"] = drv.cacheStatus == Drv::CacheStatus::Cached ||
                            drv.cacheStatus == Drv::CacheStatus::Local;
 
-        json["cacheStatus"] =
-            drv.cacheStatus == Drv::CacheStatus::Cached  ? "cached"
-            : drv.cacheStatus == Drv::CacheStatus::Local ? "local"
-                                                         : "notBuilt";
+        switch (drv.cacheStatus) {
+        case Drv::CacheStatus::Cached:
+            json["cacheStatus"] = "cached";
+            break;
+        case Drv::CacheStatus::Local:
+            json["cacheStatus"] = "local";
+            break;
+        default:
+            json["cacheStatus"] = "notBuilt";
+            break;
+        }
     }
 }

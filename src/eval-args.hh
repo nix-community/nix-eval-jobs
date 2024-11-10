@@ -5,18 +5,14 @@
 #include <nix/common-eval-args.hh>
 #include <cstddef>
 #include <nix/common-args.hh>
-#include <nix/flake/flakeref.hh>
 #include <nix/types.hh>
-#include <nix/source-path.hh>
 #include <string>
-#include <optional>
-#include <map>
-#include <set>
 
 class MyArgs : virtual public nix::MixEvalArgs,
                virtual public nix::MixCommonArgs,
                virtual public nix::RootArgs {
   public:
+    virtual ~MyArgs() = default;
     std::string releaseExpr;
     nix::Path gcRootsDir;
     bool flake = false;
@@ -35,6 +31,9 @@ class MyArgs : virtual public nix::MixEvalArgs,
                                        .useRegistries = false,
                                        .allowUnlocked = false};
     MyArgs();
+    MyArgs(MyArgs &&) = delete;
+    auto operator=(const MyArgs &) -> MyArgs & = default;
+    auto operator=(MyArgs &&) -> MyArgs & = delete;
     MyArgs(const MyArgs &) = delete;
 
     void parseArgs(char **argv, int argc);
