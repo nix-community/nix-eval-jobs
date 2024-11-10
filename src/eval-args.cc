@@ -51,15 +51,14 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     addFlag({.longName = "workers",
              .description = "number of evaluate workers",
              .labels = {"workers"},
-             .handler = {[=, this](const std::string &s) {
-                 nrWorkers = std::stoi(s);
-             }}});
+             .handler = {
+                 [this](const std::string &s) { nrWorkers = std::stoi(s); }}});
 
     addFlag({.longName = "max-memory-size",
              .description = "maximum evaluation memory size in megabyte "
                             "(4GiB per worker by default)",
              .labels = {"size"},
-             .handler = {[=, this](const std::string &s) {
+             .handler = {[this](const std::string &s) {
                  maxMemorySize = std::stoi(s);
              }}});
 
