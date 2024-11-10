@@ -27,7 +27,7 @@
 
 LineReader::LineReader(int fd) {
     stream = fdopen(fd, "r");
-    if (!stream) {
+    if (stream == nullptr) {
         throw nix::Error("fdopen(%d) failed: %s", fd, strerror(errno));
     }
 }

@@ -20,7 +20,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .handler = {[&]() {
             printf("USAGE: nix-eval-jobs [options] expr\n\n");
             for (const auto &[name, flag] : longFlags) {
-                if (hiddenCategories.count(flag->category)) {
+                if (hiddenCategories.count(flag->category) != 0u) {
                     continue;
                 }
                 printf("  --%-20s %s\n", name.c_str(),

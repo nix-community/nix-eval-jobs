@@ -6,5 +6,7 @@ Checks:
   - readability-braces-around-statements
   - readability-else-after-return
   - readability-container-size-empty
+  - readability-implicit-bool-conversion
+
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
