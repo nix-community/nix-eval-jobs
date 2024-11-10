@@ -14,6 +14,9 @@ Checks:
 
   - misc-include-cleaner
   - misc-const-correctness
+  - misc-non-private-member-variables-in-classes
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
+CheckOptions:
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True
