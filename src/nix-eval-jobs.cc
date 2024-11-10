@@ -1,12 +1,10 @@
 #include <nix/config.h> // IWYU pragma: keep
-
 #include <curl/curl.h>
 #include <nix/eval-settings.hh>
 #include <nix/shared.hh>
 #include <nix/sync.hh>
 #include <nix/eval.hh>
 #include <nix/eval-gc.hh>
-#include <nix/signals.hh>
 #include <nix/terminal.hh>
 #include <sys/wait.h>
 #include <nlohmann/json.hpp>
@@ -25,10 +23,14 @@
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/file-descriptor.hh>
 #include <nix/processes.hh>
 #include <nix/ref.hh>
 #include <nix/store-api.hh>
+#include <sys/types.h>
+#include <nix/common-eval-args.hh>
+#include <nix/flake/flake.hh>
+#include <nix/signals.hh>
+#include <nix/signals-impl.hh>
 #include <map>
 #include <condition_variable>
 #include <filesystem>

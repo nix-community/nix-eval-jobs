@@ -1,9 +1,11 @@
 #include <string.h>
 #include <unistd.h>
-#include <nix/signals.hh>
 #include <errno.h>
 #include <stdlib.h>
-#include <error.hh>
+#include <sys/types.h>
+#include <nix/error.hh>
+#include <nix/signals.hh>
+#include <nix/signals-impl.hh>
 
 #include "buffered-io.hh"
 

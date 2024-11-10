@@ -1,7 +1,7 @@
 #pragma once
-#include <memory>
 #include <nix/shared.hh>
 #include <nix/eval.hh>
+#include <memory>
 
 #include "eval-args.hh"
 

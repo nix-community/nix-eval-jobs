@@ -7,8 +7,11 @@
 #include <nix/common-args.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/types.hh>
+#include <nix/source-path.hh>
 #include <string>
 #include <optional>
+#include <map>
+#include <set>
 
 class MyArgs : virtual public nix::MixEvalArgs,
                virtual public nix::MixCommonArgs,

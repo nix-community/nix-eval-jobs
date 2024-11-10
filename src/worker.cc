@@ -3,6 +3,9 @@
 // doesn't exist on macOS
 // IWYU pragma: no_include <bits/types/struct_rusage.h>
 
+#include <nix/eval-error.hh>
+#include <nix/pos-idx.hh>
+#include <nix/source-path.hh>
 #include <nix/terminal.hh>
 #include <nix/attr-path.hh>
 #include <nix/local-fs-store.hh>
@@ -12,7 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <nix/attr-set.hh>
-#include <nix/canon-path.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
 #include <nix/eval-inline.hh>
@@ -22,15 +24,15 @@
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
-#include <nix/nixexpr.hh>
+#include <nix/outputs-spec.hh>
 #include <nlohmann/detail/json_ref.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/ref.hh>
 #include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
+#include <nix/ref.hh>
 #include <exception>
 #include <map>
 #include <memory>
@@ -46,6 +48,10 @@
 #include "drv.hh"
 #include "buffered-io.hh"
 #include "eval-args.hh"
+
+namespace nix {
+struct Expr;
+} // namespace nix
 
 static nix::Value *releaseExprTopLevelValue(nix::EvalState &state,
                                             nix::Bindings &autoArgs,

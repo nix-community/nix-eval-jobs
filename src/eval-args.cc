@@ -4,11 +4,12 @@
 #include <nix/file-system.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/lockfile.hh>
+#include <nix/canon-path.hh>
+#include <nix/source-accessor.hh>
 #include <functional>
 #include <map>
 #include <memory>
 #include <set>
-#include <utility>
 
 #include "eval-args.hh"
 
