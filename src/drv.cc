@@ -110,7 +110,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             auto metaValue = packageInfo.queryMeta(metaName);
             // Skip non-serialisable types
             // TODO: Fix serialisation of derivations to store paths
-            if (metaValue == 0) {
+            if (metaValue == nullptr) {
                 continue;
             }
 
