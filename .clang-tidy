@@ -3,5 +3,6 @@ Checks:
   - bugprone-*
   - performance-*
   - modernize-*
+  - readability-braces-around-statements
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

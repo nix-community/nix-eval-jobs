@@ -176,10 +176,11 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
                                 "while evaluating recurseForDerivations");
                         }
                     }
-                    if (recurse)
+                    if (recurse) {
                         reply["attrs"] = std::move(attrs);
-                    else
+                    } else {
                         reply["attrs"] = nlohmann::json::array();
+                    }
                 }
             } else {
                 // We ignore everything that cannot be build
@@ -213,8 +214,9 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
            start a new process. */
         struct rusage r;
         getrusage(RUSAGE_SELF, &r);
-        if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024)
+        if ((size_t)r.ru_maxrss > args.maxMemorySize * 1024) {
             break;
+        }
     }
 
     if (tryWriteLine(channel.to->get(), "restart") < 0) {

@@ -298,8 +298,9 @@ void collector(Sync<State> &state_, std::condition_variable &wakeup) {
                     state->todo.erase(state->todo.begin());
                     state->active.insert(attrPath);
                     break;
-                } else
+                } else {
                     state.wait(wakeup);
+                }
             }
 
             /* Tell the worker to evaluate it. */
@@ -402,8 +403,9 @@ auto main(int argc, char **argv) -> int {
             evalSettings.pureEval = true;
         }
 
-        if (myArgs.releaseExpr == "")
+        if (myArgs.releaseExpr == "") {
             throw UsageError("no expression specified");
+        }
 
         if (myArgs.gcRootsDir == "") {
             printMsg(lvlError, "warning: `--gc-roots-dir' not specified");
@@ -425,12 +427,14 @@ auto main(int argc, char **argv) -> int {
                 [&state_, &wakeup] { collector(state_, wakeup); });
         }
 
-        for (auto &thread : threads)
+        for (auto &thread : threads) {
             thread.join();
+        }
 
         auto state(state_.lock());
 
-        if (state->exc)
+        if (state->exc) {
             std::rethrow_exception(state->exc);
+        }
     });
 }
