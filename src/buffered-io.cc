@@ -1,7 +1,7 @@
-#include <string.h>
+#include <cstring>
 #include <unistd.h>
-#include <errno.h>
-#include <stdlib.h>
+#include <cerrno>
+#include <cstdlib>
 #include <sys/types.h>
 #include <nix/error.hh>
 #include <nix/signals.hh>

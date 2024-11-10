@@ -8,11 +8,11 @@
 #include <nix/terminal.hh>
 #include <sys/wait.h>
 #include <nlohmann/json.hpp>
-#include <errno.h>
+#include <cerrno>
 #include <pthread.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <nix/attr-set.hh>
 #include <nix/config.hh>

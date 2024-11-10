@@ -12,8 +12,8 @@
 #include <nix/installable-flake.hh>
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>

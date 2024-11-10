@@ -1,5 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <nix/args.hh>
 #include <nix/file-system.hh>
 #include <nix/flake/flake.hh>
