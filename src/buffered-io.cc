@@ -31,8 +31,7 @@
     return 0;
 }
 
-LineReader::LineReader(int fd) {
-    stream = fdopen(fd, "r");
+LineReader::LineReader(int fd) : stream(fdopen(fd, "r")) {
     if (stream == nullptr) {
         throw nix::Error("fdopen(%d) failed: %s", fd, strerror(errno));
     }
@@ -43,12 +42,10 @@ LineReader::~LineReader() {
     free(buffer);
 }
 
-LineReader::LineReader(LineReader &&other) noexcept {
-    stream = other.stream;
+LineReader::LineReader(LineReader &&other) noexcept
+    : stream(other.stream), buffer(other.buffer), len(other.len) {
     other.stream = nullptr;
-    buffer = other.buffer;
     other.buffer = nullptr;
-    len = other.len;
     other.len = 0;
 }
 

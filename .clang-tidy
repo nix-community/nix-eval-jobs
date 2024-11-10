@@ -17,6 +17,7 @@ Checks:
   - cppcoreguidelines-init-variables
   - cppcoreguidelines-pro-type-member-init
   - cppcoreguidelines-pro-type-vararg
+  - cppcoreguidelines-prefer-member-initializer
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True
