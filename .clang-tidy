@@ -9,6 +9,7 @@ Checks:
   - readability-implicit-bool-conversion
   - readability-qualified-auto
   - readability-container-contains
+  - readability-duplicate-include
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
