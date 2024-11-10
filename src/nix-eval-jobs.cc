@@ -132,12 +132,11 @@ struct Thread {
     Thread(Thread &&) noexcept = default;
 
     Thread(std::function<void(void)> f) {
-        int s;
-        pthread_attr_t attr; // NOLINT(misc-include-cleaner)
+        pthread_attr_t attr = {}; // NOLINT(misc-include-cleaner)
 
         auto func = std::make_unique<std::function<void(void)>>(std::move(f));
 
-        s = pthread_attr_init(&attr);
+        int s = pthread_attr_init(&attr);
         if (s != 0) {
             throw SysError(s, "calling pthread_attr_init");
         }
@@ -157,8 +156,7 @@ struct Thread {
     }
 
     void join() const {
-        int s;
-        s = pthread_join(thread, nullptr);
+        const int s = pthread_join(thread, nullptr);
         if (s != 0) {
             throw SysError(s, "calling pthread_join");
         }
@@ -185,7 +183,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // need to wait for it again to avoid error messages
     const pid_t pid = proc.pid.release();
     while (true) {
-        int status;
+        int status = 0;
         const int rc = waitpid(pid, &status, WNOHANG);
         if (rc == 0) {
             kill(pid, SIGKILL);

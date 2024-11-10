@@ -34,8 +34,8 @@ namespace {
 auto queryCacheStatus(nix::Store &store,
                       std::map<std::string, std::optional<std::string>>
                           &outputs) -> Drv::CacheStatus {
-    uint64_t downloadSize;
-    uint64_t narSize;
+    uint64_t downloadSize = 0;
+    uint64_t narSize = 0;
     nix::StorePathSet willBuild;
     nix::StorePathSet willSubstitute;
     nix::StorePathSet unknown;
