@@ -4,6 +4,7 @@ Checks:
   - performance-*
   - modernize-*
   - readability-*
+  - misc-*
 
   # don't find them too problematic
   - -readability-identifier-length
@@ -11,12 +12,6 @@ Checks:
 
   # maybe address this in the future
   - -readability-function-cognitive-complexity
-
-  - misc-include-cleaner
-  - misc-const-correctness
-  - misc-non-private-member-variables-in-classes
-  - misc-use-anonymous-namespace
-  - misc-*
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true
