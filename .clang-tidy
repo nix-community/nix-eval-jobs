@@ -10,6 +10,7 @@ Checks:
   - readability-qualified-auto
   - readability-container-contains
   - readability-duplicate-include
+  - readability-isolate-declaration
 
   - cppcoreguidelines-pro-type-cstyle-cast
 UseColor: true

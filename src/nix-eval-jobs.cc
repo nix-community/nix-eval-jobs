@@ -63,7 +63,8 @@ struct Proc {
     Pid pid;
 
     Proc(const Processor &proc) {
-        Pipe toPipe, fromPipe;
+        Pipe toPipe;
+        Pipe fromPipe;
         toPipe.create();
         fromPipe.create();
 

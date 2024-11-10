@@ -29,8 +29,11 @@ static auto
 queryCacheStatus(nix::Store &store,
                  std::map<std::string, std::optional<std::string>> &outputs)
     -> Drv::CacheStatus {
-    uint64_t downloadSize, narSize;
-    nix::StorePathSet willBuild, willSubstitute, unknown;
+    uint64_t downloadSize;
+    uint64_t narSize;
+    nix::StorePathSet willBuild;
+    nix::StorePathSet willSubstitute;
+    nix::StorePathSet unknown;
 
     std::vector<nix::StorePathWithOutputs> paths;
     for (auto const &[key, val] : outputs) {
