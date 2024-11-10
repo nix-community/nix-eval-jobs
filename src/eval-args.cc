@@ -12,6 +12,8 @@
 #include <map>
 #include <set>
 #include <string>
+#include <iostream>
+#include <iomanip>
 
 #include "eval-args.hh"
 
@@ -20,14 +22,15 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .longName = "help",
         .description = "show usage information",
         .handler = {[&]() {
-            printf("USAGE: nix-eval-jobs [options] expr\n\n");
+            std::cout << "USAGE: nix-eval-jobs [options] expr\n\n";
             for (const auto &[name, flag] : longFlags) {
                 if (hiddenCategories.contains(flag->category)) {
                     continue;
                 }
-                printf("  --%-20s %s\n", name.c_str(),
-                       flag->description.c_str());
+                std::cout << "  --" << std::left << std::setw(20) << name << " "
+                          << flag->description << "\n";
             }
+
             ::exit(0);
         }},
     });

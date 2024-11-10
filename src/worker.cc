@@ -12,6 +12,7 @@
 #include <sys/resource.h>
 #include <nlohmann/json.hpp>
 #include <cstdio>
+#include <iostream>
 
 // NOLINTBEGIN(modernize-deprecated-headers)
 // misc-include-cleaner wants this header rather than the C++ version
@@ -113,8 +114,8 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             break;
         }
         if (!nix::hasPrefix(s, "do ")) {
-            fprintf(stderr, "worker error: received invalid command '%s'\n",
-                    s.data());
+            std::cerr << "worker error: received invalid command '" << s
+                      << "'\n";
             abort();
         }
         auto path = nlohmann::json::parse(s.substr(3));
@@ -195,13 +196,13 @@ void worker(nix::ref<nix::EvalState> state, nix::Bindings &autoArgs,
             reply["error"] = nix::filterANSIEscapes(msg, true);
             // Don't forget to print it into the STDERR log, this is
             // what's shown in the Hydra UI.
-            fprintf(stderr, "%s\n", msg.c_str());
+            std::cerr << msg << "\n";
         } catch (
             const std::exception &e) { // FIXME: for some reason the catch block
                                        // above, doesn't trigger on macOS (?)
             const auto *msg = e.what();
             reply["error"] = nix::filterANSIEscapes(msg, true);
-            fprintf(stderr, "%s\n", msg);
+            std::cerr << msg << '\n';
         }
 
         if (tryWriteLine(channel.to->get(), reply.dump()) < 0) {
