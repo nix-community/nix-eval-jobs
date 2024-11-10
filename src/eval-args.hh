@@ -31,6 +31,9 @@ class MyArgs : virtual public nix::MixEvalArgs,
                                        .useRegistries = false,
                                        .allowUnlocked = false};
     MyArgs();
+    MyArgs(MyArgs &&) = delete;
+    auto operator=(const MyArgs &) -> MyArgs & = default;
+    auto operator=(MyArgs &&) -> MyArgs & = delete;
     MyArgs(const MyArgs &) = delete;
 
     void parseArgs(char **argv, int argc);

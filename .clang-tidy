@@ -20,6 +20,7 @@ Checks:
   - cppcoreguidelines-prefer-member-initializer
   - cppcoreguidelines-misleading-capture-default-by-value
   - cppcoreguidelines-virtual-class-destructor
+  - cppcoreguidelines-special-member-functions
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True

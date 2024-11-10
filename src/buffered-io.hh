@@ -7,6 +7,9 @@
 
 class LineReader {
   public:
+    LineReader(const LineReader &) = delete;
+    auto operator=(const LineReader &) -> LineReader & = delete;
+    auto operator=(LineReader &&) -> LineReader & = delete;
     LineReader(int fd);
     ~LineReader();
 

@@ -68,6 +68,11 @@ struct Proc {
     AutoCloseFD to, from;
     Pid pid;
 
+    Proc(const Proc &) = delete;
+    Proc(Proc &&) = delete;
+    auto operator=(const Proc &) -> Proc & = delete;
+    auto operator=(Proc &&) -> Proc & = delete;
+
     Proc(const Processor &proc) {
         Pipe toPipe;
         Pipe fromPipe;
@@ -130,6 +135,9 @@ struct Thread {
 
     Thread(const Thread &) = delete;
     Thread(Thread &&) noexcept = default;
+    ~Thread() = default;
+    auto operator=(const Thread &) -> Thread & = delete;
+    auto operator=(Thread &&) -> Thread & = delete;
 
     Thread(std::function<void(void)> f) {
         pthread_attr_t attr = {}; // NOLINT(misc-include-cleaner)
