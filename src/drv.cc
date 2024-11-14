@@ -78,15 +78,36 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         // fallback if we encounter an error
         try {
             outputsQueried = packageInfo.queryOutputs(true);
-        } catch (const nix::UnimplementedError &e) {
+        } catch (const nix::Error &e) {
+            // We could be hitting `nix::UnimplementedError`:
+            // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
+            //
+            // Or we could be hitting:
+            // ```
+            // error: derivation 'caDependingOnCA' does not have valid outputs:
+            // error: while evaluating the output path of a derivation at
+            // <nix/derivation-internal.nix>:19:9:
+            //
+            //    18|       value = commonAttrs // {
+            //    19|         outPath = builtins.getAttr outputName strict;\n
+            //      |         ^
+            //    20|         drvPath = strict.drvPath;
+            //
+            // error: path
+            // '/0rmq7bvk2raajd310spvd416f2jajrabcg6ar706gjbd6b8nmvks' is not in
+            // the Nix store
+            // ```
+            // i.e. the placeholders were confusing it.
+            //
+            // FIXME: a better fix would be in Nix to first check if
+            // `outPath` is equal to the placeholder. See
+            // https://github.com/NixOS/nix/issues/11885.
             if (!nix::experimentalFeatureSettings.isEnabled(
                     nix::Xp::CaDerivations)) {
                 // If we do have CA derivations enabled, we should not encounter
-                // this error.
+                // these errors.
                 throw;
             }
-            // we are probably hitting this:
-            // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
             outputsQueried = packageInfo.queryOutputs(false);
         }
         for (auto &[outputName, optOutputPath] : outputsQueried) {
