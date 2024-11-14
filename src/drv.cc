@@ -93,6 +93,8 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             if (optOutputPath) {
                 outputs[outputName] =
                     localStore->printStorePath(*optOutputPath);
+            } else {
+                outputs[outputName] = std::nullopt;
             }
         }
     } catch (const std::exception &e) {
