@@ -150,16 +150,10 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 }
 
 void to_json(nlohmann::json &json, const Drv &drv) {
-    std::map<std::string, nlohmann::json> outputsJson;
-    for (const auto &[name, optPath] : drv.outputs) {
-        outputsJson[name] =
-            optPath ? nlohmann::json(*optPath) : nlohmann::json(nullptr);
-    }
-
     json = nlohmann::json{{"name", drv.name},
                           {"system", drv.system},
                           {"drvPath", drv.drvPath},
-                          {"outputs", outputsJson},
+                          {"outputs", drv.outputs},
                           {"inputDrvs", drv.inputDrvs}};
 
     if (drv.meta.has_value()) {
