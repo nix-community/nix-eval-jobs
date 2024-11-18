@@ -109,7 +109,8 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
             lockFlags.inputOverrides.insert_or_assign(
                 nix::flake::parseInputPath(inputPath),
                 nix::parseFlakeRef(nix::fetchSettings, flakeRef,
-                                   nix::absPath("."), true));
+                                   nix::absPath(std::filesystem::path(".")),
+                                   true));
         }},
     });
 

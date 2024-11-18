@@ -16,6 +16,7 @@
 #include <nix/error.hh>
 #include <nix/eval-error.hh>
 #include <nix/experimental-features.hh>
+#include <nix/json-utils.hh>
 #include <nix/pos-idx.hh>
 #include <cstdint>
 #include <string>
@@ -63,6 +64,7 @@ auto queryCacheStatus(nix::Store &store,
     }
     return Drv::CacheStatus::NotBuilt;
 };
+
 } // namespace
 
 /* The fields of a derivation that are printed in json form */

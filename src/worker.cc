@@ -98,7 +98,8 @@ void worker(
         if (args.flake) {
             auto [flakeRef, fragment, outputSpec] =
                 nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-                    nix::fetchSettings, args.releaseExpr, nix::absPath("."));
+                    nix::fetchSettings, args.releaseExpr,
+                    nix::absPath(std::filesystem::path(".")));
             nix::InstallableFlake flake{
                 {}, state, std::move(flakeRef), fragment, outputSpec,
                 {}, {},    args.lockFlags};
