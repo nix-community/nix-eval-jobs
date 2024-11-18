@@ -22,7 +22,6 @@
 // NOLINTEND(modernize-deprecated-headers)
 #include <cstring>
 #include <unistd.h>
-#include <nix/attr-set.hh>
 #include <nix/config.hh>
 #include <nix/error.hh>
 #include <nix/file-descriptor.hh>
@@ -31,8 +30,6 @@
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/processes.hh>
-#include <nix/ref.hh>
-#include <nix/store-api.hh>
 #include <sys/types.h>
 #include <nix/common-eval-args.hh>
 #include <nix/flake/flake.hh>

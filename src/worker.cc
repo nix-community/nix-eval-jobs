@@ -13,12 +13,10 @@
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <iostream>
-
 // NOLINTBEGIN(modernize-deprecated-headers)
 // misc-include-cleaner wants this header rather than the C++ version
 #include <stdlib.h>
 // NOLINTEND(modernize-deprecated-headers)
-
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
@@ -27,6 +25,7 @@
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
+#include <nix/store-api.hh>
 #include <nix/outputs-spec.hh>
 #include <nlohmann/json_fwd.hpp>
 #include <nix/symbol-table.hh>
@@ -35,6 +34,7 @@
 #include <nix/value.hh>
 #include <nix/ref.hh>
 #include <exception>
+#include <filesystem>
 #include <numeric>
 #include <optional>
 #include <sstream>

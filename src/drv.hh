@@ -1,6 +1,8 @@
 #include <nix/get-drvs.hh>
 #include <nix/eval.hh>
 #include <nlohmann/json_fwd.hpp>
+// we need this include or otherwise we cannot instantiate std::optional
+#include <nlohmann/json.hpp> //NOLINT(misc-include-cleaner)
 #include <cstdint>
 #include <string>
 #include <map>
