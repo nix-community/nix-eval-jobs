@@ -9,6 +9,8 @@
 #endif
 
 #if defined(__GLIBC__)
+#include <string.h> //NOLINT(modernize-deprecated-headers)
+
 // Linux with glibc specific: sigabbrev_np
 auto get_signal_name(int sig) -> const char * {
     const char *name = sigabbrev_np(sig);
