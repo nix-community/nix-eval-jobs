@@ -33,6 +33,8 @@ jobs:
           if [ -n "$NSC_CONTAINER_REGISTRY" ]; then
             echo "NAMESPACE_RUNNER=1" >> $GITHUB_ENV
           fi
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        if: ${{ ! env.NAMESPACE_RUNNER }}
       - name: namespacelabs/nscloud-cache-action cannot mkdir /nix so we do it manually
         if: env.NAMESPACE_RUNNER
         shell: bash
@@ -61,6 +63,7 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           extra_nix_config: |
             accept-flake-config = true
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build
         run: nix develop -c bash -c 'meson setup -Db_sanitize=address,undefined build && ninja -C build'
       - name: Run tests
