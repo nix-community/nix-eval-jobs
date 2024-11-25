@@ -147,13 +147,13 @@ void worker(
                     if (args.constituents) {
                         std::vector<std::string> constituents;
                         std::vector<std::string> namedConstituents;
-                        auto a = v->attrs()->get(
+                        const auto *a = v->attrs()->get(
                             state->symbols.create("_hydraAggregate"));
                         if (a &&
                             state->forceBool(*a->value, a->pos,
                                              "while evaluating the "
                                              "`_hydraAggregate` attribute")) {
-                            auto a = v->attrs()->get(
+                            const auto *a = v->attrs()->get(
                                 state->symbols.create("constituents"));
                             if (!a)
                                 state
@@ -167,7 +167,7 @@ void worker(
                                 a->pos, *a->value, context,
                                 "while evaluating the `constituents` attribute",
                                 true, false);
-                            for (auto &c : context)
+                            for (const auto &c : context) {
                                 std::visit(
                                     nix::overloaded{
                                         [&](const nix::NixStringContextElem::

@@ -469,7 +469,7 @@ auto main(int argc, char **argv) -> int {
                         job_json["constituents"] = nlohmann::json::array();
                     }
                     std::vector<std::string> errors;
-                    for (auto child : *namedConstituents) {
+                    for (const auto &child : *namedConstituents) {
                         auto childJob = state->jobs.find(child);
                         if (childJob == state->jobs.end()) {
                             broken = true;
@@ -522,7 +522,7 @@ auto main(int argc, char **argv) -> int {
                             nix::writeDerivation(*store, drvAggregate));
 
                         if (myArgs.gcRootsDir != "") {
-                            nix::Path root =
+                            const nix::Path root =
                                 myArgs.gcRootsDir + "/" +
                                 std::string(nix::baseNameOf(newDrvPath));
                             if (!nix::pathExists(root)) {
