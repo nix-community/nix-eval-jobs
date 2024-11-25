@@ -21,7 +21,8 @@ struct Constituents {
     std::vector<std::string> namedConstituents;
     Constituents(std::vector<std::string> constituents,
                  std::vector<std::string> namedConstituents)
-        : constituents(constituents), namedConstituents(namedConstituents) {};
+        : constituents(std::move(constituents)),
+          namedConstituents(std::move(namedConstituents)) {};
 };
 
 /* The fields of a derivation that are printed in json form */

@@ -71,7 +71,7 @@ auto queryCacheStatus(nix::Store &store,
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args,
          std::optional<Constituents> constituents)
-    : constituents(constituents) {
+    : constituents(std::move(constituents)) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
 
