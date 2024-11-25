@@ -188,13 +188,13 @@ void worker(
                             state->forceList(*a->value, a->pos,
                                              "while evaluating the "
                                              "`constituents` attribute");
-                            for (unsigned int n = 0; n < a->value->listSize();
-                                 ++n) {
-                                auto v = a->value->listElems()[n];
+                            auto constituents = std::span(a->value->listElems(),
+                                                          a->value->listSize());
+                            for (const auto &v : constituents) {
                                 state->forceValue(*v, nix::noPos);
-                                if (v->type() == nix::nString)
-                                    namedConstituents.push_back(
-                                        std::string(v->c_str()));
+                                if (v->type() == nix::nString) {
+                                    namedConstituents.emplace_back(v->c_str());
+                                }
                             }
                         }
                         maybeConstituents =
