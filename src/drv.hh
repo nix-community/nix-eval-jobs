@@ -4,10 +4,12 @@
 // we need this include or otherwise we cannot instantiate std::optional
 #include <nlohmann/json.hpp> //NOLINT(misc-include-cleaner)
 #include <cstdint>
-#include <string>
 #include <map>
-#include <set>
 #include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "eval-args.hh"
 

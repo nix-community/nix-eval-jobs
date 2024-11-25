@@ -16,16 +16,18 @@
 #include <nix/error.hh>
 #include <nix/eval-error.hh>
 #include <nix/experimental-features.hh>
-#include <nix/json-utils.hh>
+// required for std::optional
+#include <nix/json-utils.hh> //NOLINT(misc-include-cleaner)
 #include <nix/pos-idx.hh>
 #include <cstdint>
-#include <string>
 #include <exception>
-#include <sstream>
-#include <vector>
-#include <optional>
 #include <map>
+#include <optional>
 #include <set>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "drv.hh"
 #include "eval-args.hh"

@@ -17,6 +17,8 @@
 // misc-include-cleaner wants this header rather than the C++ version
 #include <stdlib.h>
 // NOLINTEND(modernize-deprecated-headers)
+#include <exception>
+#include <filesystem>
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
@@ -25,22 +27,24 @@
 #include <nix/flake/flakeref.hh>
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
-#include <nix/store-api.hh>
 #include <nix/outputs-spec.hh>
-#include <nlohmann/json_fwd.hpp>
+#include <nix/ref.hh>
+#include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
-#include <nix/ref.hh>
-#include <exception>
-#include <filesystem>
+#include <nix/value/context.hh>
+#include <nlohmann/json_fwd.hpp>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
+#include <vector>
 
 #include "worker.hh"
 #include "drv.hh"
