@@ -26,6 +26,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix: ${{fromJSON(needs.nix-matrix.outputs.matrix)}}
+      fail-fast: false
     steps:
       - name: Figure out if we are running in a Namespace.so runner or not
         shell: bash
