@@ -462,8 +462,8 @@ auto main(int argc, char **argv) -> int {
                 if (namedConstituents != job_json.end() &&
                     !namedConstituents->empty()) {
                     bool broken = false;
-                    auto drvPathAggregate =
-                        store->parseStorePath((std::string)job_json["drvPath"]);
+                    auto drvPathAggregate = store->parseStorePath(
+                        static_cast<std::string>(job_json["drvPath"]));
                     auto drvAggregate = store->readDerivation(drvPathAggregate);
                     if (!job_json.contains("constituents")) {
                         job_json["constituents"] = nlohmann::json::array();
@@ -481,8 +481,9 @@ auto main(int argc, char **argv) -> int {
                             errors.push_back(nix::fmt(
                                 "%s: %s", child, childJob->second["error"]));
                         } else {
-                            auto drvPathChild = store->parseStorePath(
-                                (std::string)childJob->second["drvPath"]);
+                            auto drvPathChild =
+                                store->parseStorePath(static_cast<std::string>(
+                                    childJob->second["drvPath"]));
                             auto drvChild = store->readDerivation(drvPathChild);
                             job_json["constituents"].push_back(
                                 store->printStorePath(drvPathChild));
