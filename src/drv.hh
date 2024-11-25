@@ -1,11 +1,15 @@
 #include <nix/get-drvs.hh>
 #include <nix/eval.hh>
 #include <nlohmann/json_fwd.hpp>
+// we need this include or otherwise we cannot instantiate std::optional
+#include <nlohmann/json.hpp> //NOLINT(misc-include-cleaner)
 #include <cstdint>
-#include <string>
 #include <map>
-#include <set>
 #include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "eval-args.hh"
 
@@ -19,7 +23,8 @@ struct Constituents {
     std::vector<std::string> namedConstituents;
     Constituents(std::vector<std::string> constituents,
                  std::vector<std::string> namedConstituents)
-        : constituents(constituents), namedConstituents(namedConstituents) {};
+        : constituents(std::move(constituents)),
+          namedConstituents(std::move(namedConstituents)) {};
 };
 
 /* The fields of a derivation that are printed in json form */

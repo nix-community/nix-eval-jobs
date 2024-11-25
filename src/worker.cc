@@ -13,12 +13,12 @@
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <iostream>
-
 // NOLINTBEGIN(modernize-deprecated-headers)
 // misc-include-cleaner wants this header rather than the C++ version
 #include <stdlib.h>
 // NOLINTEND(modernize-deprecated-headers)
-
+#include <exception>
+#include <filesystem>
 #include <nix/attr-set.hh>
 #include <nix/common-eval-args.hh>
 #include <nix/error.hh>
@@ -28,19 +28,23 @@
 #include <nix/get-drvs.hh>
 #include <nix/logging.hh>
 #include <nix/outputs-spec.hh>
-#include <nlohmann/json_fwd.hpp>
+#include <nix/ref.hh>
+#include <nix/store-api.hh>
 #include <nix/symbol-table.hh>
 #include <nix/types.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
-#include <nix/ref.hh>
-#include <exception>
+#include <nix/value/context.hh>
+#include <nlohmann/json_fwd.hpp>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
+#include <vector>
 
 #include "worker.hh"
 #include "drv.hh"
@@ -98,7 +102,8 @@ void worker(
         if (args.flake) {
             auto [flakeRef, fragment, outputSpec] =
                 nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-                    nix::fetchSettings, args.releaseExpr, nix::absPath("."));
+                    nix::fetchSettings, args.releaseExpr,
+                    nix::absPath(std::filesystem::path(".")));
             nix::InstallableFlake flake{
                 {}, state, std::move(flakeRef), fragment, outputSpec,
                 {}, {},    args.lockFlags};
@@ -146,27 +151,28 @@ void worker(
                     if (args.constituents) {
                         std::vector<std::string> constituents;
                         std::vector<std::string> namedConstituents;
-                        auto a = v->attrs()->get(
+                        const auto *a = v->attrs()->get(
                             state->symbols.create("_hydraAggregate"));
-                        if (a &&
+                        if (a != nullptr &&
                             state->forceBool(*a->value, a->pos,
                                              "while evaluating the "
                                              "`_hydraAggregate` attribute")) {
-                            auto a = v->attrs()->get(
+                            const auto *a = v->attrs()->get(
                                 state->symbols.create("constituents"));
-                            if (!a)
+                            if (a == nullptr) {
                                 state
                                     ->error<nix::EvalError>(
                                         "derivation must have a ‘constituents’ "
                                         "attribute")
                                     .debugThrow();
+                            }
 
                             nix::NixStringContext context;
                             state->coerceToString(
                                 a->pos, *a->value, context,
                                 "while evaluating the `constituents` attribute",
                                 true, false);
-                            for (auto &c : context)
+                            for (const auto &c : context) {
                                 std::visit(
                                     nix::overloaded{
                                         [&](const nix::NixStringContextElem::
@@ -181,17 +187,18 @@ void worker(
                                                 DrvDeep &d) {},
                                     },
                                     c.raw);
+                            }
 
                             state->forceList(*a->value, a->pos,
                                              "while evaluating the "
                                              "`constituents` attribute");
-                            for (unsigned int n = 0; n < a->value->listSize();
-                                 ++n) {
-                                auto v = a->value->listElems()[n];
+                            auto constituents = std::span(a->value->listElems(),
+                                                          a->value->listSize());
+                            for (const auto &v : constituents) {
                                 state->forceValue(*v, nix::noPos);
-                                if (v->type() == nix::nString)
-                                    namedConstituents.push_back(
-                                        std::string(v->c_str()));
+                                if (v->type() == nix::nString) {
+                                    namedConstituents.emplace_back(v->c_str());
+                                }
                             }
                         }
                         maybeConstituents =

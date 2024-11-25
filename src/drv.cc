@@ -16,15 +16,18 @@
 #include <nix/error.hh>
 #include <nix/eval-error.hh>
 #include <nix/experimental-features.hh>
+// required for std::optional
+#include <nix/json-utils.hh> //NOLINT(misc-include-cleaner)
 #include <nix/pos-idx.hh>
 #include <cstdint>
-#include <string>
 #include <exception>
-#include <sstream>
-#include <vector>
-#include <optional>
 #include <map>
+#include <optional>
 #include <set>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "drv.hh"
 #include "eval-args.hh"
@@ -63,13 +66,14 @@ auto queryCacheStatus(nix::Store &store,
     }
     return Drv::CacheStatus::NotBuilt;
 };
+
 } // namespace
 
 /* The fields of a derivation that are printed in json form */
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args,
          std::optional<Constituents> constituents)
-    : constituents(constituents) {
+    : constituents(std::move(constituents)) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
 

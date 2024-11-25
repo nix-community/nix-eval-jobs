@@ -9,11 +9,12 @@
 #include <nix/common-eval-args.hh>
 #include <nix/source-accessor.hh>
 #include <nix/flake/flakeref.hh>
+#include <filesystem>
+#include <iomanip>
+#include <iostream>
 #include <map>
 #include <set>
 #include <string>
-#include <iostream>
-#include <iomanip>
 
 #include "eval-args.hh"
 
@@ -109,7 +110,8 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
             lockFlags.inputOverrides.insert_or_assign(
                 nix::flake::parseInputPath(inputPath),
                 nix::parseFlakeRef(nix::fetchSettings, flakeRef,
-                                   nix::absPath("."), true));
+                                   nix::absPath(std::filesystem::path(".")),
+                                   true));
         }},
     });
 

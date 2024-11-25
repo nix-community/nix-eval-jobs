@@ -1,57 +1,58 @@
 #include <nix/config.h> // IWYU pragma: keep
-#include <curl/curl.h>
-#include <nix/derivations.hh>
-#include <nix/local-fs-store.hh>
-#include <nix/eval-settings.hh>
-#include <nix/shared.hh>
-#include <nix/sync.hh>
-#include <nix/eval.hh>
-#include <nix/eval-gc.hh>
-#include <nix/terminal.hh>
-#include <sys/wait.h>
-#include <nlohmann/json.hpp>
-#include <cerrno>
-#include <pthread.h>
-#include <csignal>
-#include <cstdlib>
 // NOLINTBEGIN(modernize-deprecated-headers)
 // misc-include-cleaner wants these header rather than the C++ versions
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 // NOLINTEND(modernize-deprecated-headers)
-#include <cstring>
-#include <unistd.h>
-#include <nix/attr-set.hh>
-#include <nix/config.hh>
-#include <nix/error.hh>
-#include <nix/file-descriptor.hh>
-#include <nix/globals.hh>
-#include <nix/logging.hh>
-#include <nlohmann/detail/iterators/iter_impl.hpp>
-#include <nlohmann/json_fwd.hpp>
-#include <nix/processes.hh>
-#include <nix/ref.hh>
-#include <nix/store-api.hh>
-#include <sys/types.h>
-#include <nix/common-eval-args.hh>
-#include <nix/flake/flake.hh>
-#include <nix/signals.hh>
-#include <nix/signals-impl.hh>
-#include <nix/fmt.hh>
+#include <cassert>
+#include <cerrno>
 #include <condition_variable>
-#include <filesystem>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <curl/curl.h>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <nix/common-eval-args.hh>
+#include <nix/config.hh>
+#include <nix/derivations.hh>
+#include <nix/error.hh>
+#include <nix/eval-gc.hh>
+#include <nix/eval-settings.hh>
+#include <nix/eval.hh>
+#include <nix/file-descriptor.hh>
+#include <nix/file-system.hh>
+#include <nix/flake/flake.hh>
+#include <nix/fmt.hh>
+#include <nix/globals.hh>
+#include <nix/local-fs-store.hh>
+#include <nix/logging.hh>
+#include <nix/path.hh>
+#include <nix/processes.hh>
+#include <nix/shared.hh>
+#include <nix/signals.hh>
+#include <nix/store-api.hh>
+#include <nix/strings.hh>
+#include <nix/sync.hh>
+#include <nix/terminal.hh>
+#include <nlohmann/detail/iterators/iter_impl.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <optional>
+#include <pthread.h>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
-#include <span>
 
 #include "eval-args.hh"
 #include "buffered-io.hh"
@@ -465,14 +466,14 @@ auto main(int argc, char **argv) -> int {
                 if (namedConstituents != job_json.end() &&
                     !namedConstituents->empty()) {
                     bool broken = false;
-                    auto drvPathAggregate =
-                        store->parseStorePath((std::string)job_json["drvPath"]);
+                    auto drvPathAggregate = store->parseStorePath(
+                        static_cast<std::string>(job_json["drvPath"]));
                     auto drvAggregate = store->readDerivation(drvPathAggregate);
                     if (!job_json.contains("constituents")) {
                         job_json["constituents"] = nlohmann::json::array();
                     }
                     std::vector<std::string> errors;
-                    for (auto child : *namedConstituents) {
+                    for (const auto &child : *namedConstituents) {
                         auto childJob = state->jobs.find(child);
                         if (childJob == state->jobs.end()) {
                             broken = true;
@@ -484,8 +485,9 @@ auto main(int argc, char **argv) -> int {
                             errors.push_back(nix::fmt(
                                 "%s: %s", child, childJob->second["error"]));
                         } else {
-                            auto drvPathChild = store->parseStorePath(
-                                (std::string)childJob->second["drvPath"]);
+                            auto drvPathChild =
+                                store->parseStorePath(static_cast<std::string>(
+                                    childJob->second["drvPath"]));
                             auto drvChild = store->readDerivation(drvPathChild);
                             job_json["constituents"].push_back(
                                 store->printStorePath(drvPathChild));
@@ -508,12 +510,14 @@ auto main(int argc, char **argv) -> int {
 
                         auto hashModulo = nix::hashDerivationModulo(
                             *store, drvAggregate, true);
-                        if (hashModulo.kind != nix::DrvHash::Kind::Regular)
+                        if (hashModulo.kind != nix::DrvHash::Kind::Regular) {
                             continue;
+                        }
 
                         auto h = hashModulo.hashes.find("out");
-                        if (h == hashModulo.hashes.end())
+                        if (h == hashModulo.hashes.end()) {
                             continue;
+                        }
                         auto outPath =
                             store->makeOutputPath("out", h->second, drvName);
                         drvAggregate.env["out"] =
@@ -524,8 +528,8 @@ auto main(int argc, char **argv) -> int {
                         auto newDrvPath = store->printStorePath(
                             nix::writeDerivation(*store, drvAggregate));
 
-                        if (myArgs.gcRootsDir != "") {
-                            nix::Path root =
+                        if (myArgs.gcRootsDir.empty()) {
+                            const nix::Path root =
                                 myArgs.gcRootsDir + "/" +
                                 std::string(nix::baseNameOf(newDrvPath));
                             if (!nix::pathExists(root)) {
