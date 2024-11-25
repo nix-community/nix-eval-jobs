@@ -67,7 +67,9 @@ auto queryCacheStatus(nix::Store &store,
 
 /* The fields of a derivation that are printed in json form */
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
-         nix::PackageInfo &packageInfo, MyArgs &args) {
+         nix::PackageInfo &packageInfo, MyArgs &args,
+         std::optional<Constituents> constituents)
+    : constituents(constituents) {
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
 
@@ -175,6 +177,11 @@ void to_json(nlohmann::json &json, const Drv &drv) {
 
     if (drv.meta.has_value()) {
         json["meta"] = drv.meta.value();
+    }
+
+    if (auto constituents = drv.constituents) {
+        json["constituents"] = constituents->constituents;
+        json["namedConstituents"] = constituents->namedConstituents;
     }
 
     if (drv.cacheStatus != Drv::CacheStatus::Unknown) {

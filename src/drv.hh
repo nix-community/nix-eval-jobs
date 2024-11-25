@@ -14,10 +14,19 @@ class EvalState;
 struct PackageInfo;
 } // namespace nix
 
+struct Constituents {
+    std::vector<std::string> constituents;
+    std::vector<std::string> namedConstituents;
+    Constituents(std::vector<std::string> constituents,
+                 std::vector<std::string> namedConstituents)
+        : constituents(constituents), namedConstituents(namedConstituents) {};
+};
+
 /* The fields of a derivation that are printed in json form */
 struct Drv {
     Drv(std::string &attrPath, nix::EvalState &state,
-        nix::PackageInfo &packageInfo, MyArgs &args);
+        nix::PackageInfo &packageInfo, MyArgs &args,
+        std::optional<Constituents> constituents);
     std::string name;
     std::string system;
     std::string drvPath;
@@ -31,5 +40,6 @@ struct Drv {
     std::map<std::string, std::optional<std::string>> outputs;
     std::map<std::string, std::set<std::string>> inputDrvs;
     std::optional<nlohmann::json> meta;
+    std::optional<Constituents> constituents;
 };
 void to_json(nlohmann::json &json, const Drv &drv);
