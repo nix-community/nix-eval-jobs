@@ -149,18 +149,19 @@ void worker(
                         std::vector<std::string> namedConstituents;
                         const auto *a = v->attrs()->get(
                             state->symbols.create("_hydraAggregate"));
-                        if (a &&
+                        if (a != nullptr &&
                             state->forceBool(*a->value, a->pos,
                                              "while evaluating the "
                                              "`_hydraAggregate` attribute")) {
                             const auto *a = v->attrs()->get(
                                 state->symbols.create("constituents"));
-                            if (!a)
+                            if (a == nullptr) {
                                 state
                                     ->error<nix::EvalError>(
                                         "derivation must have a ‘constituents’ "
                                         "attribute")
                                     .debugThrow();
+                            }
 
                             nix::NixStringContext context;
                             state->coerceToString(
@@ -182,6 +183,7 @@ void worker(
                                                 DrvDeep &d) {},
                                     },
                                     c.raw);
+                            }
 
                             state->forceList(*a->value, a->pos,
                                              "while evaluating the "
