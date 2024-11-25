@@ -12,6 +12,7 @@ Checks:
   # don't find them too problematic
   - -readability-identifier-length
   - -readability-magic-numbers
+  - -bugprone-easily-swappable-parameters
 
   # maybe address this in the future
   - -readability-function-cognitive-complexity
