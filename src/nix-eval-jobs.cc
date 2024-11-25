@@ -506,12 +506,14 @@ auto main(int argc, char **argv) -> int {
 
                         auto hashModulo = nix::hashDerivationModulo(
                             *store, drvAggregate, true);
-                        if (hashModulo.kind != nix::DrvHash::Kind::Regular)
+                        if (hashModulo.kind != nix::DrvHash::Kind::Regular) {
                             continue;
+                        }
 
                         auto h = hashModulo.hashes.find("out");
-                        if (h == hashModulo.hashes.end())
+                        if (h == hashModulo.hashes.end()) {
                             continue;
+                        }
                         auto outPath =
                             store->makeOutputPath("out", h->second, drvName);
                         drvAggregate.env["out"] =
@@ -522,7 +524,7 @@ auto main(int argc, char **argv) -> int {
                         auto newDrvPath = store->printStorePath(
                             nix::writeDerivation(*store, drvAggregate));
 
-                        if (myArgs.gcRootsDir != "") {
+                        if (myArgs.gcRootsDir.empty()) {
                             const nix::Path root =
                                 myArgs.gcRootsDir + "/" +
                                 std::string(nix::baseNameOf(newDrvPath));
