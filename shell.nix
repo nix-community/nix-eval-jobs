@@ -29,7 +29,7 @@ in
     (lib.hiPrio pkgs.llvmPackages_latest.clang-tools)
   ];
 
-  shellHook = lib.optionalString stdenv.isLinux ''
+  shellHook = lib.optionalString (stdenv.isLinux && nix ? debug) ''
     export NIX_DEBUG_INFO_DIRS="${pkgs.curl.debug}/lib/debug:${nix.debug}/lib/debug''${NIX_DEBUG_INFO_DIRS:+:$NIX_DEBUG_INFO_DIRS}"
   '';
 }

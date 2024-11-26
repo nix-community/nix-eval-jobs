@@ -1,4 +1,3 @@
-#include <nix/config.h> // IWYU pragma: keep
 // NOLINTBEGIN(modernize-deprecated-headers)
 // misc-include-cleaner wants these header rather than the C++ versions
 #include <signal.h>
