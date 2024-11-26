@@ -404,6 +404,8 @@ auto main(int argc, char **argv) -> int {
         nix::initGC();
         nix::flake::initLib(nix::flakeSettings);
 
+        std::optional<nix::AutoDelete> gcRootsDir = std::nullopt;
+
         myArgs.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
@@ -427,8 +429,9 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.gcRootsDir.empty()) {
-            nix::logger->log(nix::lvlError,
-                             "warning: `--gc-roots-dir' not specified");
+            nix::Path tmpDir = nix::createTempDir();
+            gcRootsDir.emplace(tmpDir, true);
+            myArgs.gcRootsDir = tmpDir;
         } else {
             myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
         }
