@@ -211,18 +211,17 @@ void worker(
                     /* Register the derivation as a GC root.  !!! This
                        registers roots for jobs that we may have already
                        done. */
-                    if (args.gcRootsDir.empty()) {
-                        const nix::Path root =
-                            args.gcRootsDir + "/" +
-                            std::string(nix::baseNameOf(drv.drvPath));
-                        if (!nix::pathExists(root)) {
-                            auto localStore =
-                                state->store
-                                    .dynamic_pointer_cast<nix::LocalFSStore>();
-                            auto storePath =
-                                localStore->parseStorePath(drv.drvPath);
-                            localStore->addPermRoot(storePath, root);
-                        }
+                    assert(!args.gcRootsDir.empty());
+                    const nix::Path root =
+                        args.gcRootsDir + "/" +
+                        std::string(nix::baseNameOf(drv.drvPath));
+                    if (!nix::pathExists(root)) {
+                        auto localStore =
+                            state->store
+                                .dynamic_pointer_cast<nix::LocalFSStore>();
+                        auto storePath =
+                            localStore->parseStorePath(drv.drvPath);
+                        localStore->addPermRoot(storePath, root);
                     }
                 } else {
                     auto attrs = nlohmann::json::array();

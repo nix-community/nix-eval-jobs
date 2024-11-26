@@ -45,6 +45,8 @@ def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
         assert substituted_job["attr"] == "substitutedJob"
         assert substituted_job["name"].startswith("nix-")
         assert substituted_job["meta"]["broken"] is False
+
+        assert len(list(Path(tempdir).iterdir())) == 3
         return results
 
 

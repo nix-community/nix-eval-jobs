@@ -404,6 +404,8 @@ auto main(int argc, char **argv) -> int {
         nix::initGC();
         nix::flake::initLib(nix::flakeSettings);
 
+        std::optional<nix::AutoDelete> gcRootsDir = std::nullopt;
+
         myArgs.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
@@ -427,8 +429,9 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.gcRootsDir.empty()) {
-            nix::logger->log(nix::lvlError,
-                             "warning: `--gc-roots-dir' not specified");
+            nix::Path tmpDir = nix::createTempDir();
+            gcRootsDir.emplace(tmpDir, true);
+            myArgs.gcRootsDir = tmpDir;
         } else {
             myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
         }
@@ -528,17 +531,17 @@ auto main(int argc, char **argv) -> int {
                         auto newDrvPath = store->printStorePath(
                             nix::writeDerivation(*store, drvAggregate));
 
-                        if (myArgs.gcRootsDir.empty()) {
-                            const nix::Path root =
-                                myArgs.gcRootsDir + "/" +
-                                std::string(nix::baseNameOf(newDrvPath));
-                            if (!nix::pathExists(root)) {
-                                auto localStore = store.dynamic_pointer_cast<
-                                    nix::LocalFSStore>();
-                                auto storePath =
-                                    localStore->parseStorePath(newDrvPath);
-                                localStore->addPermRoot(storePath, root);
-                            }
+                        assert(!myArgs.gcRootsDir.empty());
+                        const nix::Path root =
+                            myArgs.gcRootsDir + "/" +
+                            std::string(nix::baseNameOf(newDrvPath));
+
+                        if (!nix::pathExists(root)) {
+                            auto localStore =
+                                store.dynamic_pointer_cast<nix::LocalFSStore>();
+                            auto storePath =
+                                localStore->parseStorePath(newDrvPath);
+                            localStore->addPermRoot(storePath, root);
                         }
 
                         nix::logger->log(
