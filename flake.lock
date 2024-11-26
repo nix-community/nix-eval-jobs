@@ -20,6 +20,31 @@
         "type": "github"
       }
     },
+    "nix": {
+      "inputs": {
+        "flake-compat": [],
+        "flake-parts": [],
+        "git-hooks-nix": [],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "nixpkgs-23-11": [],
+        "nixpkgs-regression": []
+      },
+      "locked": {
+        "lastModified": 1736122729,
+        "narHash": "sha256-X5MiElqJNTXxwyxczOMSl3g5S1avidkH602vCGy3SYU=",
+        "owner": "NixOS",
+        "repo": "nix",
+        "rev": "daab4d18aca63940ebd1e784c298494d0a93ce4a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
     "nix-github-actions": {
       "inputs": {
         "nixpkgs": [
@@ -59,6 +84,7 @@
     "root": {
       "inputs": {
         "flake-parts": "flake-parts",
+        "nix": "nix",
         "nix-github-actions": "nix-github-actions",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix"
