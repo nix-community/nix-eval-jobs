@@ -531,17 +531,17 @@ auto main(int argc, char **argv) -> int {
                         auto newDrvPath = store->printStorePath(
                             nix::writeDerivation(*store, drvAggregate));
 
-                        if (myArgs.gcRootsDir.empty()) {
-                            const nix::Path root =
-                                myArgs.gcRootsDir + "/" +
-                                std::string(nix::baseNameOf(newDrvPath));
-                            if (!nix::pathExists(root)) {
-                                auto localStore = store.dynamic_pointer_cast<
-                                    nix::LocalFSStore>();
-                                auto storePath =
-                                    localStore->parseStorePath(newDrvPath);
-                                localStore->addPermRoot(storePath, root);
-                            }
+                        assert(!myArgs.gcRootsDir.empty());
+                        const nix::Path root =
+                            myArgs.gcRootsDir + "/" +
+                            std::string(nix::baseNameOf(newDrvPath));
+
+                        if (!nix::pathExists(root)) {
+                            auto localStore =
+                                store.dynamic_pointer_cast<nix::LocalFSStore>();
+                            auto storePath =
+                                localStore->parseStorePath(newDrvPath);
+                            localStore->addPermRoot(storePath, root);
                         }
 
                         nix::logger->log(
