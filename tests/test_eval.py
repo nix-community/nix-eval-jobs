@@ -119,15 +119,33 @@ def test_constituents() -> None:
         )
         print(res.stdout)
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
-        assert len(results) == 2
+        assert len(results) == 4
         child = results[0]
         assert child["attr"] == "anotherone"
-        aggregate = results[1]
-        assert aggregate["attr"] == "aggregate"
-        assert "namedConstituents" not in aggregate
-        assert aggregate["constituents"][0].endswith("-job1.drv")
-        assert aggregate["constituents"][1] == child["drvPath"]
-        assert "error" not in aggregate
+        direct = results[1]
+        assert direct["attr"] == "direct_aggregate"
+        indirect = results[2]
+        assert indirect["attr"] == "indirect_aggregate"
+        mixed = results[3]
+        assert mixed["attr"] == "mixed_aggregate"
+
+        def absent_or_empty(f: str, d: dict) -> bool:
+            return f not in d or len(d[f]) == 0
+
+        assert absent_or_empty("namedConstituents", direct)
+        assert absent_or_empty("namedConstituents", indirect)
+        assert absent_or_empty("namedConstituents", mixed)
+
+        assert direct["constituents"][0].endswith("-job1.drv")
+
+        assert indirect["constituents"][0] == child["drvPath"]
+
+        assert mixed["constituents"][0].endswith("-job1.drv")
+        assert mixed["constituents"][1] == child["drvPath"]
+
+        assert "error" not in direct
+        assert "error" not in indirect
+        assert "error" not in mixed
 
 
 def test_constituents_error() -> None:
