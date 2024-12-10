@@ -26,8 +26,30 @@
             };
         };
         success = {
-          aggregate =
-            pkgs.runCommand "aggregate"
+          indirect_aggregate =
+            pkgs.runCommand "indirect_aggregate"
+              {
+                _hydraAggregate = true;
+                constituents = [
+                  "anotherone"
+                ];
+              }
+              ''
+                touch $out
+              '';
+          direct_aggregate =
+            pkgs.runCommand "direct_aggregate"
+              {
+                _hydraAggregate = true;
+                constituents = [
+                  self.hydraJobs.builtJob
+                ];
+              }
+              ''
+                touch $out
+              '';
+          mixed_aggregate =
+            pkgs.runCommand "mixed_aggregate"
               {
                 _hydraAggregate = true;
                 constituents = [
