@@ -535,14 +535,12 @@ auto main(int argc, char **argv) -> int {
                         assert(!myArgs.gcRootsDir.empty());
                         const nix::Path root =
                             myArgs.gcRootsDir + "/" +
-                            std::string(nix::baseNameOf(newDrvPath));
+                            std::string(nix::baseNameOf(newDrvPathS));
 
                         if (!nix::pathExists(root)) {
                             auto localStore =
                                 store.dynamic_pointer_cast<nix::LocalFSStore>();
-                            auto storePath =
-                                localStore->parseStorePath(newDrvPath);
-                            localStore->addPermRoot(storePath, root);
+                            localStore->addPermRoot(newDrvPath, root);
                         }
 
                         nix::logger->log(
