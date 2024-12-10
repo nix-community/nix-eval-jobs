@@ -1,4 +1,4 @@
-#include <nix/config.h> // IWYU pragma: keep
+#include <nix/config-store.hh> // IWYU pragma: keep
 
 // doesn't exist on macOS
 // IWYU pragma: no_include <bits/types/struct_rusage.h>
