@@ -13,7 +13,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
-  version = "2.24.1";
+  version = "2.25.0";
   src = if srcDir == null then filterMesonBuild ./. else srcDir;
   buildInputs = with pkgs; [
     nlohmann_json
