@@ -521,19 +521,18 @@ auto main(int argc, char **argv) -> int {
                         drvAggregate.outputs.insert_or_assign(
                             "out", nix::DerivationOutput::InputAddressed{
                                        .path = outPath});
-                        auto newDrvPath = store->printStorePath(
-                            nix::writeDerivation(*store, drvAggregate));
+                        auto newDrvPath =
+                            nix::writeDerivation(*store, drvAggregate);
+                        auto newDrvPathS = store->printStorePath(newDrvPath);
 
                         if (myArgs.gcRootsDir != "") {
                             nix::Path root =
                                 myArgs.gcRootsDir + "/" +
-                                std::string(nix::baseNameOf(newDrvPath));
+                                std::string(nix::baseNameOf(newDrvPathS));
                             if (!nix::pathExists(root)) {
                                 auto localStore = store.dynamic_pointer_cast<
                                     nix::LocalFSStore>();
-                                auto storePath =
-                                    localStore->parseStorePath(newDrvPath);
-                                localStore->addPermRoot(storePath, root);
+                                localStore->addPermRoot(newDrvPath, root);
                             }
                         }
 
@@ -541,9 +540,9 @@ auto main(int argc, char **argv) -> int {
                             nix::lvlDebug,
                             nix::fmt("rewrote aggregate derivation %s -> %s",
                                      store->printStorePath(drvPathAggregate),
-                                     newDrvPath));
+                                     newDrvPathS));
 
-                        job_json["drvPath"] = newDrvPath;
+                        job_json["drvPath"] = newDrvPathS;
                         job_json["outputs"]["out"] =
                             store->printStorePath(outPath);
                         job_json.erase("namedConstituents");
