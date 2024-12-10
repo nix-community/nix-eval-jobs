@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import os
 import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,6 +11,15 @@ from typing import Any, Dict, List
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
 BIN = PROJECT_ROOT.joinpath("build", "src", "nix-eval-jobs")
+
+
+def check_gc_root(gcRootDir: str, drvPath: str):
+    """
+    Make sure the expected GC root exists in the given dir
+    """
+    link_name = os.path.basename(drvPath)
+    symlink_path = os.path.join(gcRootDir, link_name)
+    assert os.path.islink(symlink_path) and drvPath == os.readlink(symlink_path)
 
 
 def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
@@ -148,6 +158,10 @@ def test_constituents() -> None:
         assert "error" not in direct
         assert "error" not in indirect
         assert "error" not in mixed
+
+        check_gc_root(tempdir, direct["drvPath"])
+        check_gc_root(tempdir, indirect["drvPath"])
+        check_gc_root(tempdir, mixed["drvPath"])
 
 
 def test_constituents_error() -> None:
