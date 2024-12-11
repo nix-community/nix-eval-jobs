@@ -429,7 +429,7 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.gcRootsDir.empty()) {
-            nix::Path tmpDir = nix::createTempDir();
+            const nix::Path tmpDir = nix::createTempDir();
             gcRootsDir.emplace(tmpDir, true);
             myArgs.gcRootsDir = tmpDir;
         } else {
