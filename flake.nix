@@ -63,6 +63,36 @@
 
           checks = builtins.removeAttrs self'.packages [ "default" ] // {
             shell = self'.devShells.default;
+            clang-tidy-fix = self'.packages.nix-eval-jobs.overrideAttrs (old: {
+              nativeBuildInputs = old.nativeBuildInputs ++ [
+                pkgs.git
+                (lib.hiPrio pkgs.llvmPackages_latest.clang-tools)
+              ];
+              buildPhase = ''
+                export HOME=$TMPDIR
+                cat > $HOME/.gitconfig <<EOF
+                [user]
+                  name = Nix
+                  email = nix@localhost
+                [init]
+                  defaultBranch = main
+                EOF
+                pushd ..
+                git init
+                git add .
+                git commit -m init --quiet
+                popd
+                ninja clang-tidy-fix
+                git status
+                if ! git --no-pager diff --exit-code; then
+                  echo "clang-tidy-fix failed, please run `ninja clang-tidy-fix` and commit the changes"
+                  exit 1
+                fi
+              '';
+              installPhase = ''
+                touch $out
+              '';
+            });
           };
         };
     };

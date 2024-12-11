@@ -7,10 +7,10 @@
   programs.yamlfmt.enable = true;
 
   programs.clang-format.enable = true;
+  programs.clang-format.package = pkgs.llvmPackages_latest.clang-tools;
 
   programs.deadnix.enable = true;
   programs.nixfmt.enable = true;
-  programs.nixfmt.package = pkgs.nixfmt-rfc-style;
   programs.ruff.format = true;
   programs.ruff.check = true;
 }

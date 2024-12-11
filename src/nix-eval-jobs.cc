@@ -61,7 +61,6 @@
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-}
 
 using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
                                      nix::AutoCloseFD &from)>;
@@ -374,6 +373,7 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
         wakeup.notify_all();
     }
 }
+} // namespace
 
 auto main(int argc, char **argv) -> int {
 
@@ -429,7 +429,7 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.gcRootsDir.empty()) {
-            nix::Path tmpDir = nix::createTempDir();
+            const nix::Path tmpDir = nix::createTempDir();
             gcRootsDir.emplace(tmpDir, true);
             myArgs.gcRootsDir = tmpDir;
         } else {
@@ -445,6 +445,7 @@ auto main(int argc, char **argv) -> int {
         /* Start a collector thread per worker process. */
         std::vector<Thread> threads;
         std::condition_variable wakeup;
+        threads.reserve(myArgs.nrWorkers);
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
                 [&state_, &wakeup] { collector(state_, wakeup); });
