@@ -61,7 +61,6 @@
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-}
 
 using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
                                      nix::AutoCloseFD &from)>;
@@ -374,6 +373,7 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
         wakeup.notify_all();
     }
 }
+} // namespace
 
 auto main(int argc, char **argv) -> int {
 
