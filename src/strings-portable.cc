@@ -1,4 +1,5 @@
 #include <cstring>
+#include "strings-portable.hh"
 
 #ifdef __APPLE__
 // for sys_siglist and sys_errlist
