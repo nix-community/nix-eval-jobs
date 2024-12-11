@@ -445,6 +445,7 @@ auto main(int argc, char **argv) -> int {
         /* Start a collector thread per worker process. */
         std::vector<Thread> threads;
         std::condition_variable wakeup;
+        threads.reserve(myArgs.nrWorkers);
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
                 [&state_, &wakeup] { collector(state_, wakeup); });
