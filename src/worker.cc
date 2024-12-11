@@ -256,7 +256,7 @@ void worker(
                 reply["attrs"] = nlohmann::json::array();
             }
         } catch (nix::EvalError &e) {
-            auto err = e.info();
+            const auto &err = e.info();
             std::ostringstream oss;
             nix::showErrorInfo(oss, err, nix::loggerSettings.showTrace.get());
             auto msg = oss.str();
