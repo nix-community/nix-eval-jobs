@@ -151,6 +151,7 @@ void worker(
                     if (args.constituents) {
                         std::vector<std::string> constituents;
                         std::vector<std::string> namedConstituents;
+                        bool globConstituents = false;
                         const auto *a = v->attrs()->get(
                             state->symbols.create("_hydraAggregate"));
                         if (a != nullptr &&
@@ -200,9 +201,19 @@ void worker(
                                     namedConstituents.emplace_back(v->c_str());
                                 }
                             }
+
+                            const auto *glob =
+                                v->attrs()->get(state->symbols.create(
+                                    "_hydraGlobConstituents"));
+                            globConstituents =
+                                glob != nullptr &&
+                                state->forceBool(
+                                    *glob->value, glob->pos,
+                                    "while evaluating the "
+                                    "`_hydraGlobConstituents` attribute");
                         }
-                        maybeConstituents =
-                            Constituents(constituents, namedConstituents);
+                        maybeConstituents = Constituents(
+                            constituents, namedConstituents, globConstituents);
                     }
                     auto drv = Drv(attrPathS, *state, *packageInfo, args,
                                    maybeConstituents);
