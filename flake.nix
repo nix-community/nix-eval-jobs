@@ -37,7 +37,7 @@
         };
 
         checks = {
-          inherit (self.checks) x86_64-linux aarch64-linux;
+          inherit (self.checks) x86_64-linux aarch64-linux aarch64-darwin;
           x86_64-darwin = builtins.removeAttrs self.checks.x86_64-darwin [ "treefmt" ];
         };
       };
