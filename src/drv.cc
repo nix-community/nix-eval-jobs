@@ -60,24 +60,25 @@ auto queryCacheStatus(
     if (!willBuild.empty()) {
         // TODO: can we expose the topological sort order as a graph?
         auto sorted = store.topoSortPaths(willBuild);
-        reverse(sorted.begin(), sorted.end());
+        std::ranges::reverse(sorted.begin(), sorted.end());
         for (auto &i : sorted) {
             neededBuilds.push_back(store.printStorePath(i));
         }
     }
     if (!willSubstitute.empty()) {
         std::vector<const nix::StorePath *> willSubstituteSorted = {};
-        std::for_each(willSubstitute.begin(), willSubstitute.end(),
-                      [&](const nix::StorePath &p) {
-                          willSubstituteSorted.push_back(&p);
-                      });
-        std::sort(willSubstituteSorted.begin(), willSubstituteSorted.end(),
-                  [](const nix::StorePath *lhs, const nix::StorePath *rhs) {
-                      if (lhs->name() == rhs->name()) {
-                          return lhs->to_string() < rhs->to_string();
-                      }
-                      return lhs->name() < rhs->name();
-                  });
+        std::ranges::for_each(willSubstitute.begin(), willSubstitute.end(),
+                              [&](const nix::StorePath &p) {
+                                  willSubstituteSorted.push_back(&p);
+                              });
+        std::ranges::sort(
+            willSubstituteSorted.begin(), willSubstituteSorted.end(),
+            [](const nix::StorePath *lhs, const nix::StorePath *rhs) {
+                if (lhs->name() == rhs->name()) {
+                    return lhs->to_string() < rhs->to_string();
+                }
+                return lhs->name() < rhs->name();
+            });
         for (const auto *p : willSubstituteSorted) {
             neededSubstitutes.push_back(store.printStorePath(*p));
         }
