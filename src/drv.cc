@@ -170,6 +170,14 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             .debugThrow();
     }
 
+    if (args.checkCacheStatus) {
+        // TODO: is this a bottleneck, where we should batch these queries?
+        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
+                                       neededSubstitutes, unknownPaths);
+    } else {
+        cacheStatus = Drv::CacheStatus::Unknown;
+    }
+
     if (args.meta) {
         nlohmann::json meta_;
         for (const auto &metaName : packageInfo.queryMetaNames()) {
@@ -189,13 +197,6 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             meta_[metaName] = nlohmann::json::parse(ss.str());
         }
         meta = meta_;
-    }
-    if (args.checkCacheStatus) {
-        // TODO: is this a bottleneck, where we should batch these queries?
-        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
-                                       neededSubstitutes, unknownPaths);
-    } else {
-        cacheStatus = Drv::CacheStatus::Unknown;
     }
 
     drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
