@@ -28,6 +28,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <algorithm>
 
 #include "drv.hh"
 #include "eval-args.hh"
@@ -36,13 +37,12 @@ namespace {
 
 auto queryCacheStatus(
     nix::Store &store,
-    std::map<std::string, std::optional<std::string>> &outputs)
-    -> Drv::CacheStatus {
+    std::map<std::string, std::optional<std::string>> &outputs,
+    std::vector<std::string> &neededBuilds,
+    std::vector<std::string> &neededSubstitutes,
+    std::vector<std::string> &unknownPaths) -> Drv::CacheStatus {
     uint64_t downloadSize = 0;
     uint64_t narSize = 0;
-    nix::StorePathSet willBuild;
-    nix::StorePathSet willSubstitute;
-    nix::StorePathSet unknown;
 
     std::vector<nix::StorePathWithOutputs> paths;
     for (auto const &[key, val] : outputs) {
@@ -50,9 +50,46 @@ auto queryCacheStatus(
             paths.push_back(followLinksToStorePathWithOutputs(store, *val));
         }
     }
+    nix::StorePathSet willBuild;
+    nix::StorePathSet willSubstitute;
+    nix::StorePathSet unknown;
 
     store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
                        unknown, downloadSize, narSize);
+
+    if (!willBuild.empty()) {
+        // TODO: can we expose the topological sort order as a graph?
+        auto sorted = store.topoSortPaths(willBuild);
+        std::ranges::reverse(sorted.begin(), sorted.end());
+        for (auto &i : sorted) {
+            neededBuilds.push_back(store.printStorePath(i));
+        }
+    }
+    if (!willSubstitute.empty()) {
+        std::vector<const nix::StorePath *> willSubstituteSorted = {};
+        std::ranges::for_each(willSubstitute.begin(), willSubstitute.end(),
+                              [&](const nix::StorePath &p) {
+                                  willSubstituteSorted.push_back(&p);
+                              });
+        std::ranges::sort(
+            willSubstituteSorted.begin(), willSubstituteSorted.end(),
+            [](const nix::StorePath *lhs, const nix::StorePath *rhs) {
+                if (lhs->name() == rhs->name()) {
+                    return lhs->to_string() < rhs->to_string();
+                }
+                return lhs->name() < rhs->name();
+            });
+        for (const auto *p : willSubstituteSorted) {
+            neededSubstitutes.push_back(store.printStorePath(*p));
+        }
+    }
+
+    if (!unknown.empty()) {
+        for (const auto &i : unknown) {
+            unknownPaths.push_back(store.printStorePath(i));
+        }
+    }
+
     if (willBuild.empty() && unknown.empty()) {
         if (willSubstitute.empty()) {
             // cacheStatus is Local if:
@@ -133,6 +170,14 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             .debugThrow();
     }
 
+    if (args.checkCacheStatus) {
+        // TODO: is this a bottleneck, where we should batch these queries?
+        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
+                                       neededSubstitutes, unknownPaths);
+    } else {
+        cacheStatus = Drv::CacheStatus::Unknown;
+    }
+
     if (args.meta) {
         nlohmann::json meta_;
         for (const auto &metaName : packageInfo.queryMetaNames()) {
@@ -153,35 +198,38 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         }
         meta = meta_;
     }
-    if (args.checkCacheStatus) {
-        cacheStatus = queryCacheStatus(*localStore, outputs);
-    } else {
-        cacheStatus = Drv::CacheStatus::Unknown;
-    }
 
     drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
 
-    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
-    for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
-        std::set<std::string> inputDrvOutputs;
-        for (const auto &outputName : inputNode.value) {
-            inputDrvOutputs.insert(outputName);
-        }
-        inputDrvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
-    }
     name = packageInfo.queryName();
+
+    // TODO: Ideally we wouldn't have to parse the derivation to get the system
+    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
     system = drv.platform;
+    if (args.showInputDrvs) {
+        std::map<std::string, std::set<std::string>> drvs;
+        for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
+            std::set<std::string> inputDrvOutputs;
+            for (const auto &outputName : inputNode.value) {
+                inputDrvOutputs.insert(outputName);
+            }
+            drvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
+        }
+        inputDrvs = drvs;
+    }
 }
 
 void to_json(nlohmann::json &json, const Drv &drv) {
     json = nlohmann::json{{"name", drv.name},
                           {"system", drv.system},
                           {"drvPath", drv.drvPath},
-                          {"outputs", drv.outputs},
-                          {"inputDrvs", drv.inputDrvs}};
+                          {"outputs", drv.outputs}};
 
     if (drv.meta.has_value()) {
         json["meta"] = drv.meta.value();
+    }
+    if (drv.inputDrvs) {
+        json["inputDrvs"] = drv.inputDrvs.value();
     }
 
     if (auto constituents = drv.constituents) {
@@ -205,5 +253,9 @@ void to_json(nlohmann::json &json, const Drv &drv) {
             json["cacheStatus"] = "notBuilt";
             break;
         }
+        json["neededBuilds"] = drv.neededBuilds;
+        json["neededSubstitutes"] = drv.neededSubstitutes;
+        // TODO: is it useful to include "unknown" paths at all?
+        // json["unknown"] = drv.unknownPaths;
     }
 }

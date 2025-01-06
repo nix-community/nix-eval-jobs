@@ -86,6 +86,12 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
              "will be exposed in the `cacheStatus` field of the JSON output.",
          .handler = {&checkCacheStatus, true}});
 
+    addFlag({.longName = "show-input-drvs",
+             .description =
+                 "Show input derivations in the output for each derivation. "
+                 "This is useful to get direct dependencies of a derivation.",
+             .handler = {&showInputDrvs, true}});
+
     addFlag(
         {.longName = "show-trace",
          .description = "print out a stack trace in case of evaluation errors",
