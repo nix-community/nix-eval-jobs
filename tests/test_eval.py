@@ -86,6 +86,12 @@ def test_expression() -> None:
         common_test(["-E", ci_nix.read()])
 
 
+def test_input_drvs() -> None:
+    results = common_test(["ci.nix", "--show-input-drvs"])
+    for result in results:
+        assert "inputDrvs" in result
+
+
 def test_eval_error() -> None:
     with TemporaryDirectory() as tempdir:
         cmd = [

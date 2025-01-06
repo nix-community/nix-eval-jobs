@@ -38,8 +38,8 @@ struct Drv {
 
     std::map<std::string, std::optional<std::string>> outputs;
 
-    // TODO: make this optional or remove?
-    std::map<std::string, std::set<std::string>> inputDrvs;
+    std::optional<std::map<std::string, std::set<std::string>>> inputDrvs =
+        std::nullopt;
 
     // TODO: can we lazily allocate these?
     std::vector<std::string> neededBuilds;

@@ -199,27 +199,35 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
     drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
 
-    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
-    for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
-        std::set<std::string> inputDrvOutputs;
-        for (const auto &outputName : inputNode.value) {
-            inputDrvOutputs.insert(outputName);
-        }
-        inputDrvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
-    }
     name = packageInfo.queryName();
+
+    // TODO: Ideally we wouldn't have to parse the derivation to get the system
+    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
     system = drv.platform;
+    if (args.showInputDrvs) {
+        std::map<std::string, std::set<std::string>> drvs;
+        for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
+            std::set<std::string> inputDrvOutputs;
+            for (const auto &outputName : inputNode.value) {
+                inputDrvOutputs.insert(outputName);
+            }
+            drvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
+        }
+        inputDrvs = drvs;
+    }
 }
 
 void to_json(nlohmann::json &json, const Drv &drv) {
     json = nlohmann::json{{"name", drv.name},
                           {"system", drv.system},
                           {"drvPath", drv.drvPath},
-                          {"outputs", drv.outputs},
-                          {"inputDrvs", drv.inputDrvs}};
+                          {"outputs", drv.outputs}};
 
     if (drv.meta.has_value()) {
         json["meta"] = drv.meta.value();
+    }
+    if (drv.inputDrvs) {
+        json["inputDrvs"] = drv.inputDrvs.value();
     }
 
     if (auto constituents = drv.constituents) {
