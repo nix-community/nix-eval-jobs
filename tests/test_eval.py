@@ -34,7 +34,7 @@ def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
         )
 
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
-        assert len(results) == 4
+        assert len(results) == 5
 
         built_job = results[0]
         assert built_job["attr"] == "builtJob"
@@ -47,16 +47,20 @@ def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
         assert dotted_job["attr"] == '"dotted.attr"'
         assert dotted_job["attrPath"] == ["dotted.attr"]
 
-        recurse_drv = results[2]
+        package_with_deps = results[2]
+        assert package_with_deps["attr"] == "package-with-deps"
+        assert package_with_deps["name"] == "package-with-deps"
+
+        recurse_drv = results[3]
         assert recurse_drv["attr"] == "recurse.drvB"
         assert recurse_drv["name"] == "drvB"
 
-        substituted_job = results[3]
+        substituted_job = results[4]
         assert substituted_job["attr"] == "substitutedJob"
         assert substituted_job["name"].startswith("nix-")
         assert substituted_job["meta"]["broken"] is False
 
-        assert len(list(Path(tempdir).iterdir())) == 3
+        assert len(list(Path(tempdir).iterdir())) == 4
         return results
 
 
@@ -65,6 +69,8 @@ def test_flake() -> None:
     for result in results:
         assert "isCached" not in result  # legacy
         assert "cacheStatus" not in result
+        assert "neededBuilds" not in result
+        assert "neededSubstitutes" not in result
 
 
 def test_query_cache_status() -> None:
@@ -74,6 +80,8 @@ def test_query_cache_status() -> None:
     for result in results:
         assert "isCached" in result  # legacy
         assert "cacheStatus" in result
+        assert "neededBuilds" in result
+        assert "neededSubstitutes" in result
 
 
 def test_expression() -> None:
