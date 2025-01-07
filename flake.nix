@@ -9,7 +9,7 @@
   inputs.nix-github-actions.url = "github:nix-community/nix-github-actions";
   inputs.nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.nix.url = "github:NixOS/nix";
+  inputs.nix.url = "github:Mic92/nix-1";
   inputs.nix.inputs.nixpkgs.follows = "nixpkgs";
   inputs.nix.inputs.flake-parts.follows = "";
   inputs.nix.inputs.flake-compat.follows = "";
