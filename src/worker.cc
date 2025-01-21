@@ -205,7 +205,9 @@ void worker(
                         }
                         maybeConstituents =
                             Constituents(constituents, namedConstituents);
-                    } else if (args.applyExpr != "") {
+                    }
+
+                    if (args.applyExpr != "") {
                         auto applyExpr = state->parseExprFromString(
                             args.applyExpr, state->rootPath("."));
 
@@ -226,6 +228,7 @@ void worker(
 
                         reply.update(nlohmann::json::parse(ss.str()));
                     }
+
                     auto drv = Drv(attrPathS, *state, *packageInfo, args,
                                    maybeConstituents);
                     reply.update(drv);
