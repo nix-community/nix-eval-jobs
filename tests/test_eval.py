@@ -212,6 +212,51 @@ def test_constituents_error() -> None:
         assert aggregate["constituents"] == []
 
 
+def test_apply() -> None:
+    with TemporaryDirectory() as tempdir:
+        applyExpr = """drv: {
+            the-name = drv.name;
+            version = drv.version or null;
+        }"""
+
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--workers",
+            "1",
+            "--apply",
+            applyExpr,
+            "--flake",
+            ".#hydraJobs",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+
+        assert len(results) == 5  # sanity check that we assert against all jobs
+
+        # Check that nix-eval-jobs applied the expression correctly
+        # and extracted 'version' as 'version' and 'name' as 'the-name'
+        assert results[0]["the-name"] == "job1"
+        assert results[0]["version"] is None
+        assert results[1]["the-name"].startswith("nix-")
+        assert results[1]["version"] is not None
+        assert results[2]["the-name"] == "package-with-deps"
+        assert results[2]["version"] is None
+        assert results[3]["the-name"] == "drvB"
+        assert results[3]["version"] is None
+        assert results[4]["the-name"].startswith("nix-")
+        assert results[4]["version"] is not None
+
+
 @pytest.mark.infiniterecursion
 def test_recursion_error() -> None:
     with TemporaryDirectory() as tempdir:

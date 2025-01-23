@@ -43,6 +43,7 @@ executable.
 $ nix-eval-jobs --help
 USAGE: nix-eval-jobs [options] expr
 
+  --apply                apply the derivation to the provided Nix expression
   --arg                  Pass the value *expr* as the argument *name* to Nix functions.
   --argstr               Pass the string *string* as the argument *name* to Nix functions.
   --check-cache-status   Check if the derivations are present locally or in any configured substituters (i.e. binary cache). The information will be exposed in the `cacheStatus` field of the JSON output.
