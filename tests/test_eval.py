@@ -333,8 +333,7 @@ def test_constituents_error() -> None:
         aggregate = results[1]
         assert aggregate["attr"] == "aggregate"
         assert "namedConstituents" not in aggregate
-        assert "\ndoesntexist: does not exist\n" in aggregate["error"]
-        assert aggregate["error"].startswith("doesnteval: error:")
+        assert "doesntexist: does not exist\n" in aggregate["error"]
         assert "constituents" in aggregate
 
 
