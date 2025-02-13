@@ -65,6 +65,42 @@ MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
                                      nix::AutoCloseFD &from)>;
 
+struct OutputStreamLock {
+  private:
+    std::mutex mutex;
+    std::ostream &stream;
+
+    struct LockedOutputStream {
+      public:
+        std::unique_lock<std::mutex> lock;
+        std::ostream &stream;
+
+      public:
+        LockedOutputStream(std::mutex &mutex, std::ostream &stream)
+            : lock(mutex), stream(stream) {}
+        LockedOutputStream(LockedOutputStream &&other)
+            : lock(std::move(other.lock)), stream(other.stream) {}
+
+        template <class T> LockedOutputStream operator<<(const T &s) {
+            stream << s;
+            return std::move(*this);
+        }
+
+        ~LockedOutputStream() {
+            if (lock) {
+                stream << std::flush;
+            }
+        }
+    };
+
+  public:
+    OutputStreamLock(std::ostream &stream) : stream(stream) {}
+
+    LockedOutputStream lock() { return {mutex, stream}; }
+};
+
+OutputStreamLock coutLock(std::cout);
+
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
     nix::AutoCloseFD to, from;
@@ -346,11 +382,13 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
                     newAttrs.push_back(newAttr);
                 }
             } else {
-                auto state(state_.lock());
-                state->jobs.insert_or_assign(response["attr"], response);
+                {
+                    auto state(state_.lock());
+                    state->jobs.insert_or_assign(response["attr"], response);
+                }
                 auto named = response.find("namedConstituents");
                 if (named == response.end() || named->empty()) {
-                    std::cout << respString << "\n" << std::flush;
+                    coutLock.lock() << respString << "\n";
                 }
             }
 
@@ -505,7 +543,7 @@ auto main(int argc, char **argv) -> int {
                         out["attr"] = job_json["attr"];
                         out["error"] = nix::concatStringsSep("\n", errors);
                         out["constituents"] = nlohmann::json::array();
-                        std::cout << out.dump() << "\n" << std::flush;
+                        coutLock.lock() << out.dump() << "\n";
                     } else {
                         std::string drvName(drvPathAggregate.name());
                         assert(drvName.ends_with(nix::drvExtension));
@@ -554,7 +592,7 @@ auto main(int argc, char **argv) -> int {
                         job_json["outputs"]["out"] =
                             store->printStorePath(outPath);
                         job_json.erase("namedConstituents");
-                        std::cout << job_json.dump() << "\n" << std::flush;
+                        coutLock.lock() << job_json.dump() << "\n";
                     }
                 }
             }
