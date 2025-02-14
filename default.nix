@@ -17,7 +17,8 @@ stdenv.mkDerivation {
   src = if srcDir == null then filterMesonBuild ./. else srcDir;
   buildInputs = with pkgs; [
     nlohmann_json
-    nix
+    # Hack to work around weird issue
+    nix.dev.outPath
     boost
     curl
   ];
