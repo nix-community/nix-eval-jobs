@@ -1,4 +1,3 @@
-#include <nix/config.h> // IWYU pragma: keep
 #include <nix/path-with-outputs.hh>
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>

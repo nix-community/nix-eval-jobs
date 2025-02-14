@@ -13,11 +13,12 @@ let
 in
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
-  version = "2.25.0";
+  version = "2.26.0";
   src = if srcDir == null then filterMesonBuild ./. else srcDir;
   buildInputs = with pkgs; [
     nlohmann_json
-    nix
+    # Hack to work around weird issue
+    nix.dev.outPath
     boost
     curl
   ];
