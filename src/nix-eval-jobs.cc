@@ -80,7 +80,7 @@ struct OutputStreamLock {
         LockedOutputStream(LockedOutputStream &&other)
             : lock(std::move(other.lock)), stream(other.stream) {}
 
-        template <class T> LockedOutputStream operator<<(const T &s) {
+        template <class T> LockedOutputStream operator<<(const T &s) && {
             stream << s;
             return std::move(*this);
         }
