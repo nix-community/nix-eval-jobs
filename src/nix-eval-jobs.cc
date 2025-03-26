@@ -511,10 +511,8 @@ auto main(int argc, char **argv) -> int {
                                          nix::fmt("Found dependency cycle "
                                                   "between jobs '%s' and '%s'",
                                                   e.a, e.b));
-                        state->jobs[e.a]["error"] =
-                            const_cast<DependencyCycle &>(e).message();
-                        state->jobs[e.b]["error"] =
-                            const_cast<DependencyCycle &>(e).message();
+                        state->jobs[e.a]["error"] = e.message();
+                        state->jobs[e.b]["error"] = e.message();
 
                         std::cout << state->jobs[e.a].dump() << "\n"
                                   << state->jobs[e.b].dump() << "\n";
