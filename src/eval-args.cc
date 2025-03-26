@@ -104,7 +104,10 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
 
     addFlag(
         {.longName = "apply",
-         .description = "apply the derivation to the provided Nix expression",
+         .description =
+             "Apply provided Nix function to each derivation. "
+             "The result of this function will be serialized as a JSON value "
+             "and stored inside `\"extraValue\"` key of the json line output.",
          .labels = {"expr"},
          .handler = {&applyExpr}});
 

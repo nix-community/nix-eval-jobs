@@ -40,16 +40,18 @@ executable.
 ## Further options
 
 ```console
-$ nix-eval-jobs --help
 USAGE: nix-eval-jobs [options] expr
 
-  --apply                apply the derivation to the provided Nix expression
+  --apply                Apply provided Nix function to each derivation. The result of this function will be serialized as a JSON value and stored inside `"extraValue"` key of the json line output.
   --arg                  Pass the value *expr* as the argument *name* to Nix functions.
+  --arg-from-file        Pass the contents of file *path* as the argument *name* to Nix functions.
+  --arg-from-stdin       Pass the contents of stdin as the argument *name* to Nix functions.
   --argstr               Pass the string *string* as the argument *name* to Nix functions.
   --check-cache-status   Check if the derivations are present locally or in any configured substituters (i.e. binary cache). The information will be exposed in the `cacheStatus` field of the JSON output.
+  --constituents         whether to evaluate constituents for Hydra's aggregate feature
   --debug                Set the logging verbosity level to 'debug'.
   --eval-store
-            The [URL of the Nix store](@docroot@/command-ref/new-cli/nix3-help-stores.md#store-url-format)
+            The [URL of the Nix store](@docroot@/store/types/index.md#store-url-format)
             to use for evaluation, i.e. to store derivations (`.drv` files) and inputs referenced by them.
 
   --expr                 treat the argument as a Nix expression
@@ -58,6 +60,12 @@ USAGE: nix-eval-jobs [options] expr
   --gc-roots-dir         garbage collector roots directory
   --help                 show usage information
   --impure               allow impure expressions
+  --include
+  Add *path* to search path entries used to resolve [lookup paths](@docroot@/language/constructs/lookup-path.md)
+
+  This option may be given multiple times.
+
+  Paths added through `-I` take precedence over the [`nix-path` configuration setting](@docroot@/command-ref/conf-file.md#conf-nix-path) and the [`NIX_PATH` environment variable](@docroot@/command-ref/env-common.md#env-NIX_PATH).
 
   --log-format           Set the format of log output; one of `raw`, `internal-json`, `bar` or `bar-with-logs`.
   --max-memory-size      maximum evaluation memory size in megabyte (4GiB per worker by default)
@@ -66,7 +74,9 @@ USAGE: nix-eval-jobs [options] expr
   --override-flake       Override the flake registries, redirecting *original-ref* to *resolved-ref*.
   --override-input       Override a specific flake input (e.g. `dwarffs/nixpkgs`).
   --quiet                Decrease the logging verbosity level.
+  --reference-lock-file  Read the given lock file instead of `flake.lock` within the top-level flake.
   --repair               During evaluation, rewrite missing or corrupted files in the Nix store. During building, rebuild missing or corrupted store paths.
+  --show-input-drvs      Show input derivations in the output for each derivation. This is useful to get direct dependencies of a derivation.
   --show-trace           print out a stack trace in case of evaluation errors
   --verbose              Increase the logging verbosity level.
   --workers              number of evaluate workers

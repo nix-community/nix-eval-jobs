@@ -224,7 +224,7 @@ void worker(
                         nix::printValueAsJSON(*state, true, vRes, nix::noPos,
                                               ss, context);
 
-                        reply.update(nlohmann::json::parse(ss.str()));
+                        reply["extraValue"] = nlohmann::json::parse(ss.str());
                     }
 
                     auto drv = Drv(attrPathS, *state, *packageInfo, args,
