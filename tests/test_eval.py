@@ -245,16 +245,16 @@ def test_apply() -> None:
 
         # Check that nix-eval-jobs applied the expression correctly
         # and extracted 'version' as 'version' and 'name' as 'the-name'
-        assert results[0]["the-name"] == "job1"
-        assert results[0]["version"] is None
-        assert results[1]["the-name"].startswith("nix-")
-        assert results[1]["version"] is not None
-        assert results[2]["the-name"] == "package-with-deps"
-        assert results[2]["version"] is None
-        assert results[3]["the-name"] == "drvB"
-        assert results[3]["version"] is None
-        assert results[4]["the-name"].startswith("nix-")
-        assert results[4]["version"] is not None
+        assert results[0]["extraValue"]["the-name"] == "job1"
+        assert results[0]["extraValue"]["version"] is None
+        assert results[1]["extraValue"]["the-name"].startswith("nix-")
+        assert results[1]["extraValue"]["version"] is not None
+        assert results[2]["extraValue"]["the-name"] == "package-with-deps"
+        assert results[2]["extraValue"]["version"] is None
+        assert results[3]["extraValue"]["the-name"] == "drvB"
+        assert results[3]["extraValue"]["version"] is None
+        assert results[4]["extraValue"]["the-name"].startswith("nix-")
+        assert results[4]["extraValue"]["version"] is not None
 
 
 @pytest.mark.infiniterecursion
