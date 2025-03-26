@@ -2,7 +2,6 @@
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
-#include <nix/config.hh>
 #include <nix/derivations.hh>
 #include <nix/get-drvs.hh>
 #include <nix/derived-path-map.hh>

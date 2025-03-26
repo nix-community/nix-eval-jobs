@@ -1,6 +1,5 @@
 #include <fnmatch.h>
 #include <nlohmann/json.hpp>
-#include <nix/config.h>
 #include <nix/derivations.hh>
 #include <nix/local-fs-store.hh>
 

@@ -8,7 +8,6 @@
 #include <utility>
 #include <variant>
 
-#include <nix/config.h>
 #include <nix/store-api.hh>
 
 struct DependencyCycle : public std::exception {
