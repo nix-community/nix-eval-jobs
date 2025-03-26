@@ -2,7 +2,6 @@
 #include <nix/store-api.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/value-to-json.hh>
-#include <nix/config.hh>
 #include <nix/derivations.hh>
 #include <nix/get-drvs.hh>
 #include <nix/derived-path-map.hh>
@@ -234,6 +233,7 @@ void to_json(nlohmann::json &json, const Drv &drv) {
     if (auto constituents = drv.constituents) {
         json["constituents"] = constituents->constituents;
         json["namedConstituents"] = constituents->namedConstituents;
+        json["globConstituents"] = constituents->globConstituents;
     }
 
     if (drv.cacheStatus != Drv::CacheStatus::Unknown) {
