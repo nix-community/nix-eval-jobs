@@ -1,66 +1,39 @@
 #include <fnmatch.h>
+#include <nix/store-api.hh>
 #include <nlohmann/json.hpp>
 #include <nix/derivations.hh>
 #include <nix/local-fs-store.hh>
+#include <nix/topo-sort.hh>
 
 #include "constituents.hh"
 
 namespace {
-// This is copied from `libutil/topo-sort.hh` in CppNix and slightly modified.
-// However, I needed a way to use strings as identifiers to sort, but still be
-// able to put AggregateJob objects into this function since I'd rather not have
-// to transform back and forth between a list of strings and AggregateJobs in
-// resolveNamedConstituents.
-auto topoSort(const std::set<AggregateJob> &items)
-    -> std::vector<AggregateJob> {
-    std::vector<AggregateJob> sorted;
-    std::set<std::string> visited;
-    std::set<std::string> parents;
 
-    std::map<std::string, AggregateJob> dictIdentToObject;
-    for (const auto &it : items) {
-        dictIdentToObject.insert({it.name, it});
-    }
-
-    std::function<void(const std::string &path, const std::string *parent)>
-        dfsVisit;
-
-    dfsVisit = [&](const std::string &path, const std::string *parent) {
-        if (parents.contains(path)) {
-            dictIdentToObject.erase(path);
-            dictIdentToObject.erase(*parent);
+std::vector<AggregateJob>
+topoSort(const std::set<AggregateJob> &aggregateJobs) {
+    return nix::topoSort<AggregateJob>(
+        aggregateJobs,
+        [&aggregateJobs](const AggregateJob &job) {
+            std::set<AggregateJob> dependencies;
+            for (const auto &depName : job.dependencies) {
+                auto it =
+                    std::find_if(aggregateJobs.begin(), aggregateJobs.end(),
+                                 [&depName](const AggregateJob &j) {
+                                     return j.name == depName;
+                                 });
+                if (it != aggregateJobs.end()) {
+                    dependencies.insert(*it);
+                }
+            }
+            return dependencies;
+        },
+        [&aggregateJobs](const AggregateJob &job, const AggregateJob &parent) {
             std::set<std::string> remaining;
-            for (auto &[k, _] : dictIdentToObject) {
-                remaining.insert(k);
+            for (const auto &j : aggregateJobs) {
+                remaining.insert(j.name);
             }
-            throw DependencyCycle(path, *parent, remaining);
-        }
-
-        if (!visited.insert(path).second) {
-            return;
-        }
-        parents.insert(path);
-
-        std::set<std::string> references = dictIdentToObject[path].dependencies;
-
-        for (const auto &i : references) {
-            /* Don't traverse into items that don't exist in our starting set.
-             */
-            if (i != path &&
-                dictIdentToObject.find(i) != dictIdentToObject.end()) {
-                dfsVisit(i, &path);
-            }
-        }
-
-        sorted.push_back(dictIdentToObject[path]);
-        parents.erase(path);
-    };
-
-    for (auto &[i, _] : dictIdentToObject) {
-        dfsVisit(i, nullptr);
-    }
-
-    return sorted;
+            return DependencyCycle(job.name, parent.name, remaining);
+        });
 }
 
 auto insertMatchingConstituents(

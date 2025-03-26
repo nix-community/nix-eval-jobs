@@ -9,20 +9,18 @@
 #include <variant>
 
 #include <nix/store-api.hh>
+#include <nix/error.hh>
 
-struct DependencyCycle : public std::exception {
+struct DependencyCycle : public nix::Error {
     std::string a;
     std::string b;
     std::set<std::string> remainingAggregates;
 
     DependencyCycle(std::string a, std::string b,
                     const std::set<std::string> &remainingAggregates)
-        : a(std::move(a)), b(std::move(b)),
+        : nix::Error(nix::fmt("Dependency cycle: %s <-> %s", a, b)),
+          a(std::move(a)), b(std::move(b)),
           remainingAggregates(remainingAggregates) {}
-
-    [[nodiscard]] auto message() const -> std::string {
-        return nix::fmt("Dependency cycle: %s <-> %s", a, b);
-    }
 };
 
 struct AggregateJob {
@@ -32,6 +30,9 @@ struct AggregateJob {
 
     auto operator<(const AggregateJob &b) const -> bool {
         return name < b.name;
+    }
+    bool operator==(const AggregateJob &other) const {
+        return name == other.name;
     }
 };
 
