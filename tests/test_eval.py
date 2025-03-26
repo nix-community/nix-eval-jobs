@@ -124,6 +124,27 @@ def test_eval_error() -> None:
         assert "this is an evaluation error" in attrs["error"]
 
 
+def test_no_gcroot_dir() -> None:
+    cmd = [
+        str(BIN),
+        "--meta",
+        "--workers",
+        "1",
+        "--flake",
+        ".#legacyPackages.x86_64-linux.brokenPkgs",
+    ]
+    res = subprocess.run(
+        cmd,
+        cwd=TEST_ROOT.joinpath("assets"),
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+    print(res.stdout)
+    attrs = json.loads(res.stdout)
+    assert attrs["attr"] == "brokenPackage"
+    assert "this is an evaluation error" in attrs["error"]
+
+
 def test_constituents() -> None:
     with TemporaryDirectory() as tempdir:
         cmd = [
