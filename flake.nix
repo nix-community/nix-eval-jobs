@@ -17,7 +17,14 @@
       nixVersion = lib.fileContents ./.nix-version;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = inputs.nixpkgs.lib.systems.flakeExposed;
+      systems = [
+        "aarch64-linux"
+        "riscv64-linux"
+        "x86_64-linux"
+
+        "aarch64-darwin"
+        "x86_64-darwin"
+      ];
       imports = [ inputs.treefmt-nix.flakeModule ];
 
       flake.githubActions = inputs.nix-github-actions.lib.mkGithubMatrix {
