@@ -465,11 +465,7 @@ auto main(int argc, char **argv) -> int {
             throw nix::UsageError("no expression specified");
         }
 
-        if (myArgs.gcRootsDir.empty()) {
-            const nix::Path tmpDir = nix::createTempDir();
-            gcRootsDir.emplace(tmpDir, true);
-            myArgs.gcRootsDir = tmpDir;
-        } else {
+        if (!myArgs.gcRootsDir.empty()) {
             myArgs.gcRootsDir = std::filesystem::absolute(myArgs.gcRootsDir);
         }
 
@@ -570,15 +566,16 @@ auto main(int argc, char **argv) -> int {
                             nix::writeDerivation(*store, drvAggregate);
                         auto newDrvPathS = store->printStorePath(newDrvPath);
 
-                        assert(!myArgs.gcRootsDir.empty());
-                        const nix::Path root =
-                            myArgs.gcRootsDir + "/" +
-                            std::string(nix::baseNameOf(newDrvPathS));
+                        if (!myArgs.gcRootsDir.empty()) {
+                            const nix::Path root =
+                                myArgs.gcRootsDir + "/" +
+                                std::string(nix::baseNameOf(newDrvPathS));
 
-                        if (!nix::pathExists(root)) {
-                            auto localStore =
-                                store.dynamic_pointer_cast<nix::LocalFSStore>();
-                            localStore->addPermRoot(newDrvPath, root);
+                            if (!nix::pathExists(root)) {
+                                auto localStore = store.dynamic_pointer_cast<
+                                    nix::LocalFSStore>();
+                                localStore->addPermRoot(newDrvPath, root);
+                            }
                         }
 
                         nix::logger->log(
