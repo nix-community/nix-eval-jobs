@@ -1,4 +1,6 @@
-project('nix-eval-jobs', 'cpp',
+project(
+  'nix-eval-jobs',
+  'cpp',
   version : '0.1.6',
   license : 'GPL-3.0',
 )
