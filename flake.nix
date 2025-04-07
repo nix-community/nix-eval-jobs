@@ -1,7 +1,7 @@
 {
   description = "Hydra's builtin hydra-eval-jobs as a standalone";
 
-  inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs";
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
