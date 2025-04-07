@@ -6,15 +6,22 @@
   srcDir ? null,
 }:
 
-let
-  filterMesonBuild = builtins.filterSource (
-    path: type: type != "directory" || baseNameOf path != "build"
-  );
-in
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
   version = "2.28.0";
-  src = if srcDir == null then filterMesonBuild ./. else srcDir;
+  src =
+    if srcDir == null then
+      lib.fileset.toSource {
+        fileset = lib.fileset.unions [
+          ./meson.build
+          ./src/meson.build
+          (lib.fileset.fileFilter (file: file.hasExt "cc") ./src)
+          (lib.fileset.fileFilter (file: file.hasExt "hh") ./src)
+        ];
+        root = ./.;
+      }
+    else
+      srcDir;
   buildInputs = with pkgs; [
     nlohmann_json
     curl
