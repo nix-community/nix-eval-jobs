@@ -1,22 +1,22 @@
-#include <nix/path-with-outputs.hh>
-#include <nix/store-api.hh>
-#include <nix/local-fs-store.hh>
-#include <nix/value-to-json.hh>
-#include <nix/derivations.hh>
-#include <nix/get-drvs.hh>
-#include <nix/derived-path-map.hh>
-#include <nix/eval.hh>
+#include <nix/store/path-with-outputs.hh>
+#include <nix/store/store-api.hh>
+#include <nix/store/local-fs-store.hh>
+#include <nix/expr/value-to-json.hh>
+#include <nix/store/derivations.hh>
+#include <nix/expr/get-drvs.hh>
+#include <nix/store/derived-path-map.hh>
+#include <nix/expr/eval.hh>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
-#include <nix/path.hh>
-#include <nix/ref.hh>
-#include <nix/value/context.hh>
-#include <nix/error.hh>
-#include <nix/eval-error.hh>
-#include <nix/experimental-features.hh>
+#include <nix/store/path.hh>
+#include <nix/util/ref.hh>
+#include <nix/expr/value/context.hh>
+#include <nix/util/error.hh>
+#include <nix/expr/eval-error.hh>
+#include <nix/util/experimental-features.hh>
 // required for std::optional
-#include <nix/json-utils.hh> //NOLINT(misc-include-cleaner)
-#include <nix/pos-idx.hh>
+#include <nix/util/json-utils.hh> //NOLINT(misc-include-cleaner)
+#include <nix/util/pos-idx.hh>
 #include <cstdint>
 #include <exception>
 #include <map>

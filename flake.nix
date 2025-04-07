@@ -1,7 +1,9 @@
 {
   description = "Hydra's builtin hydra-eval-jobs as a standalone";
 
-  inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
+  # Switch back after https://nixpk.gs/pr-tracker.html?pr=396710 is finished
+  # inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs";
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
@@ -54,8 +56,11 @@
         let
           drvArgs = {
             srcDir = self;
-            nix =
-              if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
+            nixComponents =
+              if nixVersion == "latest" then
+                pkgs.nixVersions.nixComponents_latest
+              else
+                pkgs.nixVersions."nixComponents_${nixVersion}";
           };
         in
         {

@@ -1,14 +1,15 @@
 #pragma once
 
-#include "fmt.hh"
 #include <map>
-#include <nlohmann/json_fwd.hpp>
 #include <set>
 #include <string>
 #include <utility>
 #include <variant>
 
-#include <nix/store-api.hh>
+#include <nlohmann/json_fwd.hpp>
+
+#include <nix/util/fmt.hh>
+#include <nix/store/store-api.hh>
 
 struct DependencyCycle : public std::exception {
     std::string a;
