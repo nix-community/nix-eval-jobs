@@ -54,8 +54,11 @@
         let
           drvArgs = {
             srcDir = self;
-            nix =
-              if nixVersion == "latest" then pkgs.nixVersions.latest else pkgs.nixVersions."nix_${nixVersion}";
+            nixComponents =
+              if nixVersion == "latest" then
+                pkgs.nixVersions.nixComponents_latest
+              else
+                pkgs.nixVersions."nixComponents_${nixVersion}";
           };
         in
         {

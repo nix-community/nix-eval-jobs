@@ -16,11 +16,13 @@
   stdenv ? pkgs.stdenv,
   lib ? pkgs.lib,
   srcDir ? null,
-  nix,
+  nixComponents,
 }:
 
 let
-  nix-eval-jobs = pkgs.callPackage ./default.nix { inherit srcDir nix; };
+  nix-eval-jobs = pkgs.callPackage ./default.nix {
+    inherit srcDir nixComponents;
+  };
 in
 (pkgs.mkShell.override { inherit stdenv; }) {
   inherit (nix-eval-jobs) buildInputs;
@@ -29,7 +31,7 @@ in
     (lib.hiPrio pkgs.llvmPackages_latest.clang-tools)
   ];
 
-  shellHook = lib.optionalString (stdenv.isLinux && nix ? debug) ''
-    export NIX_DEBUG_INFO_DIRS="${pkgs.curl.debug}/lib/debug:${nix.debug}/lib/debug''${NIX_DEBUG_INFO_DIRS:+:$NIX_DEBUG_INFO_DIRS}"
+  shellHook = lib.optionalString (stdenv.isLinux && nixComponents.nix-everything ? debug) ''
+    export NIX_DEBUG_INFO_DIRS="${pkgs.curl.debug}/lib/debug:${nixComponents.nix-everything.debug}/lib/debug''${NIX_DEBUG_INFO_DIRS:+:$NIX_DEBUG_INFO_DIRS}"
   '';
 }

@@ -1,7 +1,7 @@
 {
   stdenv,
   lib,
-  nix,
+  nixComponents,
   pkgs,
   srcDir ? null,
 }:
@@ -17,9 +17,13 @@ stdenv.mkDerivation {
   src = if srcDir == null then filterMesonBuild ./. else srcDir;
   buildInputs = with pkgs; [
     nlohmann_json
-    # Hack to work around weird issue
-    nix.dev.outPath
     curl
+    nixComponents.nix-store
+    nixComponents.nix-fetchers
+    nixComponents.nix-expr
+    nixComponents.nix-flake
+    nixComponents.nix-main
+    nixComponents.nix-cmd
   ];
   nativeBuildInputs =
     with pkgs;
@@ -32,7 +36,10 @@ stdenv.mkDerivation {
     ]
     ++ (lib.optional stdenv.cc.isClang [ pkgs.clang-tools ]);
 
-  passthru.nix = nix;
+  passthru = {
+    inherit nixComponents;
+  };
+
   meta = {
     description = "Hydra's builtin hydra-eval-jobs as a standalone";
     homepage = "https://github.com/nix-community/nix-eval-jobs";
