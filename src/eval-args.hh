@@ -1,11 +1,11 @@
 #pragma once
 
 #include <nix/flake/flake.hh>
-#include <nix/args/root.hh>
-#include <nix/common-eval-args.hh>
+#include <nix/util/args/root.hh>
+#include <nix/cmd/common-eval-args.hh>
 #include <cstddef>
-#include <nix/common-args.hh>
-#include <nix/types.hh>
+#include <nix/main/common-args.hh>
+#include <nix/util/types.hh>
 #include <string>
 
 class MyArgs : virtual public nix::MixEvalArgs,

@@ -8,9 +8,9 @@
 #include <string.h>
 // NOLINTEND(modernize-deprecated-headers)
 #include <cstdio>
-#include <nix/error.hh>
-#include <nix/signals.hh>
-#include <nix/signals-impl.hh>
+#include <nix/util/error.hh>
+#include <nix/util/signals.hh>
+#include <nix/util/signals-impl.hh>
 #include <string>
 #include <string_view>
 

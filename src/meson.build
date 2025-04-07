@@ -31,17 +31,8 @@ executable('nix-eval-jobs', src,
              nix_cmd_dep,
              nix_flake_dep,
              nix_fetchers_dep,
-             boost_dep,
              nlohmann_json_dep,
              threads_dep
            ],
            install: true,
-           cpp_args: [
-             '-std=c++2a',
-             '--include', 'autotools-config.h',
-             '--include', 'nix/config-cmd.hh',
-             '--include', 'nix/config-expr.hh',
-             '--include', 'nix/config-main.hh',
-             '--include', 'nix/config-store.hh',
-             '--include', 'nix/config-util.hh',
-           ])
+)

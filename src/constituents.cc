@@ -1,7 +1,7 @@
 #include <fnmatch.h>
 #include <nlohmann/json.hpp>
-#include <nix/derivations.hh>
-#include <nix/local-fs-store.hh>
+#include <nix/store/derivations.hh>
+#include <nix/store/local-fs-store.hh>
 
 #include "constituents.hh"
 

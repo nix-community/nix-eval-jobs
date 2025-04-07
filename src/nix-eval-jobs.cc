@@ -17,28 +17,29 @@
 #include <iostream>
 #include <map>
 #include <memory>
-#include <nix/common-eval-args.hh>
-#include <nix/config.hh>
-#include <nix/derivations.hh>
-#include <nix/error.hh>
-#include <nix/eval-gc.hh>
-#include <nix/eval-settings.hh>
-#include <nix/eval.hh>
-#include <nix/file-descriptor.hh>
-#include <nix/file-system.hh>
+#include <nix/cmd/common-eval-args.hh>
+#include <nix/util/configuration.hh>
+#include <nix/store/derivations.hh>
+#include <nix/util/error.hh>
+#include <nix/expr/eval-gc.hh>
+#include <nix/expr/eval-settings.hh>
+#include <nix/expr/eval.hh>
+#include <nix/util/file-descriptor.hh>
+#include <nix/util/file-system.hh>
 #include <nix/flake/flake.hh>
-#include <nix/fmt.hh>
-#include <nix/globals.hh>
-#include <nix/local-fs-store.hh>
-#include <nix/logging.hh>
-#include <nix/path.hh>
-#include <nix/processes.hh>
-#include <nix/shared.hh>
-#include <nix/signals.hh>
-#include <nix/store-api.hh>
-#include <nix/strings.hh>
-#include <nix/sync.hh>
-#include <nix/terminal.hh>
+#include <nix/flake/settings.hh>
+#include <nix/util/fmt.hh>
+#include <nix/store/globals.hh>
+#include <nix/store/local-fs-store.hh>
+#include <nix/util/logging.hh>
+#include <nix/store/path.hh>
+#include <nix/util/processes.hh>
+#include <nix/main/shared.hh>
+#include <nix/util/signals.hh>
+#include <nix/store/store-api.hh>
+#include <nix/util/strings.hh>
+#include <nix/util/sync.hh>
+#include <nix/util/terminal.hh>
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -440,7 +441,7 @@ auto main(int argc, char **argv) -> int {
     return nix::handleExceptions(args[0], [&]() {
         nix::initNix();
         nix::initGC();
-        nix::flake::initLib(nix::flakeSettings);
+        nix::flakeSettings.configureEvalSettings(nix::evalSettings);
 
         std::optional<nix::AutoDelete> gcRootsDir = std::nullopt;
 
