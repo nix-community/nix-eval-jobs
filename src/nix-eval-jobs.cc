@@ -451,10 +451,6 @@ auto main(int argc, char **argv) -> int {
          * causing "unexpected EOF" during eval */
         nix::settings.builders = "";
 
-        /* Prevent access to paths outside of the Nix search path and
-           to the environment. */
-        nix::evalSettings.restrictEval = false;
-
         /* When building a flake, use pure evaluation (no access to
            'getEnv', 'currentSystem' etc. */
         if (myArgs.impure) {
