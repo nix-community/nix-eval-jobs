@@ -21,7 +21,6 @@
     let
       inherit (inputs.nixpkgs) lib;
       inherit (inputs) self;
-      nixVersion = lib.fileContents ./.nix-version;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -59,13 +58,24 @@
       perSystem =
         { pkgs, self', ... }:
         let
+          nixDependencies = lib.makeScope pkgs.newScope (
+            import (inputs.nix + "/packaging/dependencies.nix") {
+              inherit pkgs;
+              inherit (pkgs) stdenv;
+              inputs = { };
+            }
+          );
+          nixComponents = lib.makeScope nixDependencies.newScope (
+            import (inputs.nix + "/packaging/components.nix") {
+              officialRelease = true;
+              inherit lib pkgs;
+              src = inputs.nix;
+              maintainers = [ ];
+            }
+          );
           drvArgs = {
             srcDir = self;
-            nixComponents =
-              if nixVersion == "latest" then
-                pkgs.nixVersions.nixComponents_latest
-              else
-                pkgs.nixVersions."nixComponents_${nixVersion}";
+            inherit nixComponents;
           };
         in
         {

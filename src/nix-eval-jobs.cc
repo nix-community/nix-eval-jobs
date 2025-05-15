@@ -36,7 +36,7 @@
 #include <nix/util/processes.hh>
 #include <nix/main/shared.hh>
 #include <nix/util/signals.hh>
-#include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nix/util/strings.hh>
 #include <nix/util/sync.hh>
 #include <nix/util/terminal.hh>
