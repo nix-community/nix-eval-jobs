@@ -4,6 +4,11 @@
   # Switch back after https://nixpk.gs/pr-tracker.html?pr=396710 is finished
   # inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
   inputs.nixpkgs.url = "github:nixos/nixpkgs";
+  inputs.nix = {
+    url = "github:NixOS/nix/2.29-maintenance";
+    # We want to control the deps precisely
+    flake = false;
+  };
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.treefmt-nix.url = "github:numtide/treefmt-nix";

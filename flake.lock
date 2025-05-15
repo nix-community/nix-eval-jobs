@@ -20,6 +20,23 @@
         "type": "github"
       }
     },
+    "nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1748154947,
+        "narHash": "sha256-rCpANMHFIlafta6J/G0ILRd+WNSnzv/lzi40Y8f1AR8=",
+        "owner": "NixOS",
+        "repo": "nix",
+        "rev": "d761dad79c79af17aa476a29749bd9d69747548f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "2.29-maintenance",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
     "nix-github-actions": {
       "inputs": {
         "nixpkgs": [
@@ -42,11 +59,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1743996429,
-        "narHash": "sha256-N/bd+ot8fC0VFe3E1LgB7r9kVUX9L9dfgP6UU8WQ0EI=",
+        "lastModified": 1747278858,
+        "narHash": "sha256-k0C88JEwe7+U9gsM+FCDhf3LISAKMGF87fsP5Rh2944=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "e1b2ab8d1ed56608d2ede877fab5bbe2a15e75fe",
+        "rev": "35b60d7d59f51a6a9c124b82e490d35df399832f",
         "type": "github"
       },
       "original": {
@@ -58,6 +75,7 @@
     "root": {
       "inputs": {
         "flake-parts": "flake-parts",
+        "nix": "nix",
         "nix-github-actions": "nix-github-actions",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix"
