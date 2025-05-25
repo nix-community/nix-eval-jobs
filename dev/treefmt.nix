@@ -1,13 +1,11 @@
 { pkgs, lib, ... }:
 let
-  supportsNix =
-    lib.meta.availableOn pkgs.stdenv.buildPlatform pkgs.nixfmt.compiler
-    && (builtins.tryEval pkgs.nixfmt.compiler.outPath).success;
   supportsDeno =
     lib.meta.availableOn pkgs.stdenv.buildPlatform pkgs.deno
     && (builtins.tryEval pkgs.deno.outPath).success;
 in
 {
+  flakeCheck = pkgs.hostPlatform.system != "riscv64-linux";
   # Used to find the project root
   projectRootFile = "flake.lock";
 
@@ -18,7 +16,7 @@ in
   programs.clang-format.package = pkgs.llvmPackages_latest.clang-tools;
 
   programs.deadnix.enable = true;
-  programs.nixfmt.enable = supportsNix;
+  programs.nixfmt.enable = true;
   programs.ruff.format = true;
   programs.ruff.check = true;
 }

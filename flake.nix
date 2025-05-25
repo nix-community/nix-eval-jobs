@@ -4,6 +4,11 @@
   # Switch back after https://nixpk.gs/pr-tracker.html?pr=396710 is finished
   # inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
   inputs.nixpkgs.url = "github:nixos/nixpkgs";
+  inputs.nix = {
+    url = "github:NixOS/nix/2.29-maintenance";
+    # We want to control the deps precisely
+    flake = false;
+  };
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
@@ -16,7 +21,6 @@
     let
       inherit (inputs.nixpkgs) lib;
       inherit (inputs) self;
-      nixVersion = lib.fileContents ./.nix-version;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -54,13 +58,24 @@
       perSystem =
         { pkgs, self', ... }:
         let
+          nixDependencies = lib.makeScope pkgs.newScope (
+            import (inputs.nix + "/packaging/dependencies.nix") {
+              inherit pkgs;
+              inherit (pkgs) stdenv;
+              inputs = { };
+            }
+          );
+          nixComponents = lib.makeScope nixDependencies.newScope (
+            import (inputs.nix + "/packaging/components.nix") {
+              officialRelease = true;
+              inherit lib pkgs;
+              src = inputs.nix;
+              maintainers = [ ];
+            }
+          );
           drvArgs = {
             srcDir = self;
-            nixComponents =
-              if nixVersion == "latest" then
-                pkgs.nixVersions.nixComponents_latest
-              else
-                pkgs.nixVersions."nixComponents_${nixVersion}";
+            inherit nixComponents;
           };
         in
         {

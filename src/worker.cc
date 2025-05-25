@@ -28,7 +28,7 @@
 #include <nix/util/logging.hh>
 #include <nix/store/outputs-spec.hh>
 #include <nix/util/ref.hh>
-#include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nix/expr/symbol-table.hh>
 #include <nix/util/types.hh>
 #include <nix/util/util.hh>
