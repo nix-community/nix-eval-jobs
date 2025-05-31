@@ -17,6 +17,14 @@ in
 
   programs.deadnix.enable = true;
   programs.nixfmt.enable = true;
+  programs.mypy = {
+    enable = true;
+    directories = {
+      "tests" = {
+        extraPythonPackages = [ pkgs.python3Packages.pytest ];
+      };
+    };
+  };
   programs.ruff.format = true;
   programs.ruff.check = true;
 }

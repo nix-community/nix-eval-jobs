@@ -14,7 +14,7 @@ PROJECT_ROOT = TEST_ROOT.parent
 BIN = PROJECT_ROOT.joinpath("build", "src", "nix-eval-jobs")
 
 
-def check_gc_root(gcRootDir: str, drvPath: str):
+def check_gc_root(gcRootDir: str, drvPath: str) -> None:
     """
     Make sure the expected GC root exists in the given dir
     """
