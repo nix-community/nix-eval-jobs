@@ -362,21 +362,26 @@ def test_empty_needed() -> None:
         print(res.stdout)
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
 
-        # Should be 3 results - nginx, foo, and bar
+        # Should be 3 results - nginx, proxyWrapper, and webService
         assert len(results) == 3
 
         # Find the results for each attr
-        bar_result = next(r for r in results if r["attr"] == "bar")
-        foo_result = next(r for r in results if r["attr"] == "foo")
+        web_service_result = next(r for r in results if r["attr"] == "webService")
+        proxy_wrapper_result = next(r for r in results if r["attr"] == "proxyWrapper")
         nginx_result = next(r for r in results if r["attr"] == "nginx")
 
-        # Bar should have foo.drv in its neededBuilds
-        assert len(bar_result["neededBuilds"]) > 0
-        assert any(foo_result["drvPath"] in drv for drv in bar_result["neededBuilds"])
+        # webService should have proxyWrapper.drv in its neededBuilds
+        assert len(web_service_result["neededBuilds"]) > 0
+        assert any(
+            proxy_wrapper_result["drvPath"] in drv for drv in web_service_result["neededBuilds"]
+        )
 
-        # Foo should have nginx in its neededSubstitutes
-        assert len(foo_result["neededSubstitutes"]) > 0
-        assert any(nginx_result["outputs"]["out"] in out for out in foo_result["neededSubstitutes"])
+        # proxyWrapper should have nginx in its neededSubstitutes
+        assert len(proxy_wrapper_result["neededSubstitutes"]) > 0
+        assert any(
+            nginx_result["outputs"]["out"] in out
+            for out in proxy_wrapper_result["neededSubstitutes"]
+        )
 
         # Nginx may have other dependencies in neededSubstitutes
         assert len(nginx_result["neededSubstitutes"]) > 0
