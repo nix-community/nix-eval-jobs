@@ -10,6 +10,23 @@
       hydraJobs = import ./ci.nix { inherit pkgs; };
 
       legacyPackages.x86_64-linux = {
+        emptyNeeded = rec {
+          # This is a reproducer for issue #369 where neededBuilds and neededSubstitutes are empty
+          # when they should contain values
+          inherit (pkgs) nginx;
+          proxyWrapper = derivation {
+            name = "proxyWrapper";
+            system = "aarch64-linux";
+            builder = "/bin/sh";
+            inherit (pkgs) nginx;
+          };
+          webService = derivation {
+            name = "webService";
+            system = "aarch64-linux";
+            builder = "/bin/sh";
+            inherit proxyWrapper;
+          };
+        };
         brokenPkgs = {
           brokenPackage = throw "this is an evaluation error";
         };
