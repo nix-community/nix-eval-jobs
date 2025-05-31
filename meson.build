@@ -1,8 +1,12 @@
 project(
   'nix-eval-jobs',
   'cpp',
-  version : '0.1.6',
-  license : 'GPL-3.0',
+  version: '0.1.6',
+  license: 'GPL-3.0',
+  default_options: [
+    'cpp_std=c++20',
+    'warning_level=3'
+  ]
 )
 
 threads_dep = dependency('threads', required: true)
