@@ -338,6 +338,50 @@ def test_constituents_error() -> None:
         assert "constituents" in aggregate
 
 
+def test_empty_needed() -> None:
+    """Test for issue #369 where neededBuilds and neededSubstitutes are empty when they shouldn't be"""
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--check-cache-status",
+            "--workers",
+            "1",
+            "--flake",
+            ".#legacyPackages.x86_64-linux.emptyNeeded",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+
+        # Should be 3 results - nginx, foo, and bar
+        assert len(results) == 3
+
+        # Find the results for each attr
+        bar_result = next(r for r in results if r["attr"] == "bar")
+        foo_result = next(r for r in results if r["attr"] == "foo")
+        nginx_result = next(r for r in results if r["attr"] == "nginx")
+
+        # Bar should have foo.drv in its neededBuilds
+        assert len(bar_result["neededBuilds"]) > 0
+        assert any(foo_result["drvPath"] in drv for drv in bar_result["neededBuilds"])
+
+        # Foo should have nginx in its neededSubstitutes
+        assert len(foo_result["neededSubstitutes"]) > 0
+        assert any(nginx_result["outputs"]["out"] in out for out in foo_result["neededSubstitutes"])
+
+        # Nginx may have other dependencies in neededSubstitutes
+        assert len(nginx_result["neededSubstitutes"]) > 0
+
+
 def test_apply() -> None:
     with TemporaryDirectory() as tempdir:
         applyExpr = """drv: {
