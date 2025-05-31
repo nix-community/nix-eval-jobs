@@ -183,9 +183,9 @@ void worker(
                                                     *state->store));
                                         },
                                         [&](const nix::NixStringContextElem::
-                                                Opaque &o) {},
+                                                Opaque &o [[maybe_unused]]) {},
                                         [&](const nix::NixStringContextElem::
-                                                DrvDeep &d) {},
+                                                DrvDeep &d [[maybe_unused]]) {},
                                     },
                                     c.raw);
                             }

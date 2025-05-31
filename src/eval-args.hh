@@ -32,7 +32,11 @@ class MyArgs : virtual public nix::MixEvalArgs,
     nix::flake::LockFlags lockFlags = {.updateLockFile = false,
                                        .writeLockFile = false,
                                        .useRegistries = false,
-                                       .allowUnlocked = false};
+                                       .allowUnlocked = false,
+                                       .referenceLockFilePath = {},
+                                       .outputLockFilePath = {},
+                                       .inputOverrides = {},
+                                       .inputUpdates = {}};
     MyArgs();
     MyArgs(MyArgs &&) = delete;
     auto operator=(const MyArgs &) -> MyArgs & = default;
