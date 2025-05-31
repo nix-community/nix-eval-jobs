@@ -14,17 +14,17 @@
           # This is a reproducer for issue #369 where neededBuilds and neededSubstitutes are empty
           # when they should contain values
           inherit (pkgs) nginx;
-          foo = derivation {
-            name = "foo";
+          proxyWrapper = derivation {
+            name = "proxyWrapper";
             system = "aarch64-linux";
             builder = "/bin/sh";
             inherit (pkgs) nginx;
           };
-          bar = derivation {
-            name = "bar";
+          webService = derivation {
+            name = "webService";
             system = "aarch64-linux";
             builder = "/bin/sh";
-            inherit foo;
+            inherit proxyWrapper;
           };
         };
         brokenPkgs = {
