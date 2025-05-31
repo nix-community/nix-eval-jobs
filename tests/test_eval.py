@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import json
-import subprocess
 import os
-import pytest
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List
+from typing import Any
+
+import pytest
 
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
@@ -22,7 +23,7 @@ def check_gc_root(gcRootDir: str, drvPath: str):
     assert os.path.islink(symlink_path) and drvPath == os.readlink(symlink_path)
 
 
-def common_test(extra_args: List[str]) -> List[Dict[str, Any]]:
+def common_test(extra_args: list[str]) -> list[dict[str, Any]]:
     with TemporaryDirectory() as tempdir:
         cmd = [str(BIN), "--gc-roots-dir", tempdir, "--meta"] + extra_args
         res = subprocess.run(
@@ -90,7 +91,7 @@ def test_expression() -> None:
         assert "isCached" not in result  # legacy
         assert "cacheStatus" not in result
 
-    with open(TEST_ROOT.joinpath("assets/ci.nix"), "r") as ci_nix:
+    with open(TEST_ROOT.joinpath("assets/ci.nix")) as ci_nix:
         common_test(["-E", ci_nix.read()])
 
 
@@ -221,7 +222,7 @@ def test_constituents_all() -> None:
         print(res.stdout)
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
         assert len(results) == 3
-        assert list(map(lambda x: x["name"], results)) == [
+        assert [x["name"] for x in results] == [
             "constituentA",
             "constituentB",
             "aggregate",
@@ -254,7 +255,7 @@ def test_constituents_glob_misc() -> None:
         print(res.stdout)
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
         assert len(results) == 6
-        assert list(map(lambda x: x["name"], results)) == [
+        assert [x["name"] for x in results] == [
             "constituentA",
             "constituentB",
             "aggregate0",
@@ -300,7 +301,7 @@ def test_constituents_cycle() -> None:
         print(res.stdout)
         results = [json.loads(r) for r in res.stdout.split("\n") if r]
         assert len(results) == 2
-        assert list(map(lambda x: x["name"], results)) == ["aggregate0", "aggregate1"]
+        assert [x["name"] for x in results] == ["aggregate0", "aggregate1"]
         for i in results:
             assert i["error"] == "Dependency cycle: aggregate0 <-> aggregate1"
 
