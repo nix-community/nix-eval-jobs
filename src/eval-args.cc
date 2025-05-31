@@ -13,7 +13,6 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <set>
 #include <string>
 
 #include "eval-args.hh"
@@ -21,7 +20,11 @@
 MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     addFlag({
         .longName = "help",
+        .aliases = {},
+        .shortName = 0,
         .description = "show usage information",
+        .category = "",
+        .labels = {},
         .handler = {[&]() {
             std::cout << "USAGE: nix-eval-jobs [options] expr\n\n";
             for (const auto &[name, flag] : longFlags) {
@@ -34,86 +37,183 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
 
             ::exit(0); // NOLINT(concurrency-mt-unsafe)
         }},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
     });
 
-    addFlag({.longName = "impure",
-             .description = "allow impure expressions",
-             .handler = {&impure, true}});
+    addFlag({
+        .longName = "impure",
+        .aliases = {},
+        .shortName = 0,
+        .description = "allow impure expressions",
+        .category = "",
+        .labels = {},
+        .handler = {&impure, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "force-recurse",
-             .description = "force recursion (don't respect recurseIntoAttrs)",
-             .handler = {&forceRecurse, true}});
+    addFlag({
+        .longName = "force-recurse",
+        .aliases = {},
+        .shortName = 0,
+        .description = "force recursion (don't respect recurseIntoAttrs)",
+        .category = "",
+        .labels = {},
+        .handler = {&forceRecurse, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "gc-roots-dir",
-             .description = "garbage collector roots directory",
-             .labels = {"path"},
-             .handler = {&gcRootsDir}});
+    addFlag({
+        .longName = "gc-roots-dir",
+        .aliases = {},
+        .shortName = 0,
+        .description = "garbage collector roots directory",
+        .category = "",
+        .labels = {"path"},
+        .handler = {&gcRootsDir},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "workers",
-             .description = "number of evaluate workers",
-             .labels = {"workers"},
-             .handler = {
-                 [this](const std::string &s) { nrWorkers = std::stoi(s); }}});
+    addFlag({
+        .longName = "workers",
+        .aliases = {},
+        .shortName = 0,
+        .description = "number of evaluate workers",
+        .category = "",
+        .labels = {"workers"},
+        .handler = {[this](const std::string &s) { nrWorkers = std::stoi(s); }},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "max-memory-size",
-             .description = "maximum evaluation memory size in megabyte "
-                            "(4GiB per worker by default)",
-             .labels = {"size"},
-             .handler = {[this](const std::string &s) {
-                 maxMemorySize = std::stoi(s);
-             }}});
+    addFlag({
+        .longName = "max-memory-size",
+        .aliases = {},
+        .shortName = 0,
+        .description = "maximum evaluation memory size in megabyte "
+                       "(4GiB per worker by default)",
+        .category = "",
+        .labels = {"size"},
+        .handler = {[this](const std::string &s) {
+            maxMemorySize = std::stoi(s);
+        }},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "flake",
-             .description = "build a flake",
-             .handler = {&flake, true}});
+    addFlag({
+        .longName = "flake",
+        .aliases = {},
+        .shortName = 0,
+        .description = "build a flake",
+        .category = "",
+        .labels = {},
+        .handler = {&flake, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "meta",
-             .description = "include derivation meta field in output",
-             .handler = {&meta, true}});
+    addFlag({
+        .longName = "meta",
+        .aliases = {},
+        .shortName = 0,
+        .description = "include derivation meta field in output",
+        .category = "",
+        .labels = {},
+        .handler = {&meta, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag(
-        {.longName = "constituents",
-         .description =
-             "whether to evaluate constituents for Hydra's aggregate feature",
-         .handler = {&constituents, true}});
+    addFlag({
+        .longName = "constituents",
+        .aliases = {},
+        .shortName = 0,
+        .description =
+            "whether to evaluate constituents for Hydra's aggregate feature",
+        .category = "",
+        .labels = {},
+        .handler = {&constituents, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag(
-        {.longName = "check-cache-status",
-         .description =
-             "Check if the derivations are present locally or in "
-             "any configured substituters (i.e. binary cache). The "
-             "information "
-             "will be exposed in the `cacheStatus` field of the JSON output.",
-         .handler = {&checkCacheStatus, true}});
+    addFlag({
+        .longName = "check-cache-status",
+        .aliases = {},
+        .shortName = 0,
+        .description = "Check if the derivations are present locally or in "
+                       "any configured substituters (i.e. binary cache). The "
+                       "information will be exposed in the `cacheStatus` field "
+                       "of the JSON output.",
+        .category = "",
+        .labels = {},
+        .handler = {&checkCacheStatus, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "show-input-drvs",
-             .description =
-                 "Show input derivations in the output for each derivation. "
-                 "This is useful to get direct dependencies of a derivation.",
-             .handler = {&showInputDrvs, true}});
+    addFlag({
+        .longName = "show-input-drvs",
+        .aliases = {},
+        .shortName = 0,
+        .description =
+            "Show input derivations in the output for each derivation. "
+            "This is useful to get direct dependencies of a derivation.",
+        .category = "",
+        .labels = {},
+        .handler = {&showInputDrvs, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag(
-        {.longName = "show-trace",
-         .description = "print out a stack trace in case of evaluation errors",
-         .handler = {&showTrace, true}});
+    addFlag({
+        .longName = "show-trace",
+        .aliases = {},
+        .shortName = 0,
+        .description = "print out a stack trace in case of evaluation errors",
+        .category = "",
+        .labels = {},
+        .handler = {&showTrace, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag({.longName = "expr",
-             .shortName = 'E',
-             .description = "treat the argument as a Nix expression",
-             .handler = {&fromArgs, true}});
+    addFlag({
+        .longName = "expr",
+        .aliases = {},
+        .shortName = 'E',
+        .description = "treat the argument as a Nix expression",
+        .category = "",
+        .labels = {},
+        .handler = {&fromArgs, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
-    addFlag(
-        {.longName = "apply",
-         .description =
-             "Apply provided Nix function to each derivation. "
-             "The result of this function will be serialized as a JSON value "
-             "and stored inside `\"extraValue\"` key of the json line output.",
-         .labels = {"expr"},
-         .handler = {&applyExpr}});
+    addFlag({
+        .longName = "apply",
+        .aliases = {},
+        .shortName = 0,
+        .description =
+            "Apply provided Nix function to each derivation. "
+            "The result of this function will be serialized as a JSON value "
+            "and stored inside `\"extraValue\"` key of the json line output.",
+        .category = "",
+        .labels = {"expr"},
+        .handler = {&applyExpr},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
 
     // usually in MixFlakeOptions
     addFlag({
         .longName = "override-input",
+        .aliases = {},
+        .shortName = 0,
         .description =
             "Override a specific flake input (e.g. `dwarffs/nixpkgs`).",
         .category = category,
@@ -128,19 +228,26 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                                    nix::absPath(std::filesystem::path(".")),
                                    true));
         }},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
     });
 
-    addFlag({.longName = "reference-lock-file",
-             .description = "Read the given lock file instead of `flake.lock` "
-                            "within the top-level flake.",
-             .category = category,
-             .labels = {"flake-lock-path"},
-             .handler = {[&](const std::string &lockFilePath) {
-                 lockFlags.referenceLockFilePath = {
-                     nix::getFSSourceAccessor(),
-                     nix::CanonPath(nix::absPath(lockFilePath))};
-             }},
-             .completer = completePath});
+    addFlag({
+        .longName = "reference-lock-file",
+        .aliases = {},
+        .shortName = 0,
+        .description = "Read the given lock file instead of `flake.lock` "
+                       "within the top-level flake.",
+        .category = category,
+        .labels = {"flake-lock-path"},
+        .handler = {[&](const std::string &lockFilePath) {
+            lockFlags.referenceLockFilePath = {
+                nix::getFSSourceAccessor(),
+                nix::CanonPath(nix::absPath(lockFilePath))};
+        }},
+        .completer = completePath,
+        .experimentalFeature = std::nullopt,
+    });
 
     expectArg("expr", &releaseExpr);
 }
