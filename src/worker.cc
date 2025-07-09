@@ -193,8 +193,7 @@ void worker(
                             state->forceList(*a->value, a->pos,
                                              "while evaluating the "
                                              "`constituents` attribute");
-                            auto constituents = std::span(a->value->listElems(),
-                                                          a->value->listSize());
+                            auto constituents = a->value->listView();
                             for (const auto &v : constituents) {
                                 state->forceValue(*v, nix::noPos);
                                 if (v->type() == nix::nString) {
