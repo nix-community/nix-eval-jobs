@@ -5,7 +5,7 @@
   # inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
   inputs.nixpkgs.url = "github:nixos/nixpkgs";
   inputs.nix = {
-    url = "github:NixOS/nix/2.29-maintenance";
+    url = "github:NixOS/nix/2.30-maintenance";
     # We want to control the deps precisely
     flake = false;
   };

@@ -57,24 +57,23 @@ auto queryCacheStatus(
             nix::StorePathWithOutputs(inputDrvPath, inputNode.value));
     }
 
-    nix::StorePathSet willBuild;
-    nix::StorePathSet willSubstitute;
-    nix::StorePathSet unknown;
+    auto missing = store.queryMissing(toDerivedPaths(paths));
 
-    store.queryMissing(toDerivedPaths(paths), willBuild, willSubstitute,
-                       unknown, downloadSize, narSize);
+    downloadSize = missing.downloadSize;
+    narSize = missing.narSize;
 
-    if (!willBuild.empty()) {
+    if (!missing.willBuild.empty()) {
         // TODO: can we expose the topological sort order as a graph?
-        auto sorted = store.topoSortPaths(willBuild);
+        auto sorted = store.topoSortPaths(missing.willBuild);
         std::ranges::reverse(sorted.begin(), sorted.end());
         for (auto &i : sorted) {
             neededBuilds.push_back(store.printStorePath(i));
         }
     }
-    if (!willSubstitute.empty()) {
+    if (!missing.willSubstitute.empty()) {
         std::vector<const nix::StorePath *> willSubstituteSorted = {};
-        std::ranges::for_each(willSubstitute.begin(), willSubstitute.end(),
+        std::ranges::for_each(missing.willSubstitute.begin(),
+                              missing.willSubstitute.end(),
                               [&](const nix::StorePath &p) {
                                   willSubstituteSorted.push_back(&p);
                               });
@@ -91,14 +90,14 @@ auto queryCacheStatus(
         }
     }
 
-    if (!unknown.empty()) {
-        for (const auto &i : unknown) {
+    if (!missing.unknown.empty()) {
+        for (const auto &i : missing.unknown) {
             unknownPaths.push_back(store.printStorePath(i));
         }
     }
 
-    if (willBuild.empty() && unknown.empty()) {
-        if (willSubstitute.empty()) {
+    if (missing.willBuild.empty() && missing.unknown.empty()) {
+        if (missing.willSubstitute.empty()) {
             // cacheStatus is Local if:
             //  - there's nothing to build
             //  - there's nothing to substitute
