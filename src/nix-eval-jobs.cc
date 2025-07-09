@@ -415,11 +415,6 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
 } // namespace
 
 auto main(int argc, char **argv) -> int {
-
-    /* Prevent undeclared dependencies in the evaluation via
-       $NIX_PATH. */
-    unsetenv("NIX_PATH"); // NOLINT(concurrency-mt-unsafe)
-
     /* We are doing the garbage collection by killing forks */
     setenv("GC_DONT_GC", "1", 1); // NOLINT(concurrency-mt-unsafe)
 

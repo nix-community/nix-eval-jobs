@@ -38,16 +38,25 @@ auto queryCacheStatus(
     std::map<std::string, std::optional<std::string>> &outputs,
     std::vector<std::string> &neededBuilds,
     std::vector<std::string> &neededSubstitutes,
-    std::vector<std::string> &unknownPaths) -> Drv::CacheStatus {
+    std::vector<std::string> &unknownPaths, const nix::Derivation &drv)
+    -> Drv::CacheStatus {
     uint64_t downloadSize = 0;
     uint64_t narSize = 0;
 
     std::vector<nix::StorePathWithOutputs> paths;
+    // Add output paths
     for (auto const &[key, val] : outputs) {
         if (val) {
             paths.push_back(followLinksToStorePathWithOutputs(store, *val));
         }
     }
+
+    // Add input derivation paths
+    for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
+        paths.push_back(
+            nix::StorePathWithOutputs(inputDrvPath, inputNode.value));
+    }
+
     nix::StorePathSet willBuild;
     nix::StorePathSet willSubstitute;
     nix::StorePathSet unknown;
@@ -168,10 +177,17 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             .debugThrow();
     }
 
+    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
+    name = packageInfo.queryName();
+
+    // Read the derivation once and use it for everything
+    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
+    system = drv.platform;
+
     if (args.checkCacheStatus) {
         // TODO: is this a bottleneck, where we should batch these queries?
         cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
-                                       neededSubstitutes, unknownPaths);
+                                       neededSubstitutes, unknownPaths, drv);
     } else {
         cacheStatus = Drv::CacheStatus::Unknown;
     }
@@ -197,13 +213,6 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         meta = meta_;
     }
 
-    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
-
-    name = packageInfo.queryName();
-
-    // TODO: Ideally we wouldn't have to parse the derivation to get the system
-    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
-    system = drv.platform;
     if (args.showInputDrvs) {
         std::map<std::string, std::set<std::string>> drvs;
         for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {

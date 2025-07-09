@@ -338,6 +338,55 @@ def test_constituents_error() -> None:
         assert "constituents" in aggregate
 
 
+def test_empty_needed() -> None:
+    """Test for issue #369 where neededBuilds and neededSubstitutes are empty when they shouldn't be"""
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--check-cache-status",
+            "--workers",
+            "1",
+            "--flake",
+            ".#legacyPackages.x86_64-linux.emptyNeeded",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        print(res.stdout)
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+
+        # Should be 3 results - nginx, proxyWrapper, and webService
+        assert len(results) == 3
+
+        # Find the results for each attr
+        web_service_result = next(r for r in results if r["attr"] == "webService")
+        proxy_wrapper_result = next(r for r in results if r["attr"] == "proxyWrapper")
+        nginx_result = next(r for r in results if r["attr"] == "nginx")
+
+        # webService should have proxyWrapper.drv in its neededBuilds
+        assert len(web_service_result["neededBuilds"]) > 0
+        assert any(
+            proxy_wrapper_result["drvPath"] in drv for drv in web_service_result["neededBuilds"]
+        )
+
+        # proxyWrapper should have nginx in its neededSubstitutes
+        assert len(proxy_wrapper_result["neededSubstitutes"]) > 0
+        assert any(
+            nginx_result["outputs"]["out"] in out
+            for out in proxy_wrapper_result["neededSubstitutes"]
+        )
+
+        # Nginx may have other dependencies in neededSubstitutes
+        assert len(nginx_result["neededSubstitutes"]) > 0
+
+
 def test_apply() -> None:
     with TemporaryDirectory() as tempdir:
         applyExpr = """drv: {
