@@ -13,8 +13,6 @@
   inputs.flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
   inputs.treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
-  inputs.nix-github-actions.url = "github:nix-community/nix-github-actions";
-  inputs.nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs =
     inputs@{ flake-parts, ... }:
@@ -32,28 +30,6 @@
         "x86_64-darwin"
       ];
       imports = [ inputs.treefmt-nix.flakeModule ];
-
-      flake.githubActions = inputs.nix-github-actions.lib.mkGithubMatrix {
-        platforms = {
-          "x86_64-linux" = [
-            "nscloud-ubuntu-22.04-amd64-4x16-with-cache"
-            "nscloud-cache-size-20gb"
-            "nscloud-cache-tag-nix-eval-jobs"
-          ];
-          "x86_64-darwin" = "macos-13";
-          "aarch64-darwin" = "macos-latest";
-          "aarch64-linux" = [
-            "nscloud-ubuntu-22.04-arm64-4x16-with-cache"
-            "nscloud-cache-size-20gb"
-            "nscloud-cache-tag-nix-eval-jobs"
-          ];
-        };
-
-        checks = {
-          inherit (self.checks) x86_64-linux aarch64-linux aarch64-darwin;
-          x86_64-darwin = builtins.removeAttrs self.checks.x86_64-darwin [ "treefmt" ];
-        };
-      };
 
       perSystem =
         { pkgs, self', ... }:
