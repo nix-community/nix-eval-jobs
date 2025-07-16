@@ -8,7 +8,7 @@
 
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
-  version = "2.29.0";
+  version = "2.30.0";
   src =
     if srcDir == null then
       lib.fileset.toSource {
