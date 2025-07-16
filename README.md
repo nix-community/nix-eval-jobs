@@ -100,6 +100,8 @@ we collect example ci configuration for various CIs.
 
 ## Projects using nix-eval-jobs
 
+- [Hydra](https://github.com/NixOS/hydra) - The Nix-based continuous build
+  system
 - [nix-fast-build](https://github.com/Mic92/nix-fast-build) - Combine the power
   of nix-eval-jobs with nix-output-monitor to speed-up your evaluation and
   building process
