@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 // NOLINTEND(modernize-deprecated-headers)
+#include <atomic>
 #include <cassert>
 #include <cerrno>
 #include <condition_variable>
@@ -209,12 +210,32 @@ struct Thread {
     }
 };
 
+struct AttrPathComparator {
+    bool operator()(const nlohmann::json &a, const nlohmann::json &b) const {
+        // Compare arrays element by element lexicographically
+        size_t minSize = std::min(a.size(), b.size());
+        for (size_t i = 0; i < minSize; ++i) {
+            const std::string &elemA = a[i].get<std::string>();
+            const std::string &elemB = b[i].get<std::string>();
+            if (elemA < elemB) return true;
+            if (elemA > elemB) return false;
+        }
+        // If all common elements are equal, shorter array comes first
+        return a.size() < b.size();
+    }
+};
+
 struct State {
-    std::set<nlohmann::json> todo =
-        nlohmann::json::array({nlohmann::json::array()});
-    std::set<nlohmann::json> active;
+    std::set<nlohmann::json, AttrPathComparator> todo;
+    size_t activeCount = 0;
     std::map<std::string, nlohmann::json> jobs;
     std::exception_ptr exc;
+    size_t numWorkers = 0;
+
+    State() {
+        // Initialize with root path
+        todo.insert(nlohmann::json::array());
+    }
 };
 
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
@@ -293,7 +314,8 @@ auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
     return joined;
 }
 
-void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
+void collector(nix::Sync<State> &state_, std::condition_variable &wakeup,
+               size_t workerId) {
     try {
         std::optional<std::unique_ptr<Proc>> proc_;
         std::optional<std::unique_ptr<LineReader>> fromReader_;
@@ -335,19 +357,31 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
             while (true) {
                 nix::checkInterrupt();
                 auto state(state_.lock());
-                if ((state->todo.empty() && state->active.empty()) ||
-                    state->exc) {
+
+                if ((state->todo.empty() && state->activeCount == 0) || state->exc) {
                     if (tryWriteLine(proc->to.get(), "exit") < 0) {
                         handleBrokenWorkerPipe(*proc.get(), "sending exit");
                     }
                     return;
                 }
+                
                 if (!state->todo.empty()) {
-                    attrPath = *state->todo.begin();
-                    state->todo.erase(state->todo.begin());
-                    state->active.insert(attrPath);
-                    break;
+                    // Calculate which items this worker should take based on lexical partitioning
+                    size_t totalItems = state->todo.size();
+                    size_t itemsPerWorker = (totalItems + state->numWorkers - 1) / state->numWorkers; // Round up
+                    size_t startOffset = workerId * itemsPerWorker;
+                    
+                    // If this worker has items in its range, take the first one
+                    if (startOffset < totalItems) {
+                        auto it = state->todo.begin();
+                        std::advance(it, startOffset);
+                        attrPath = *it;
+                        state->todo.erase(it);
+                        state->activeCount++;
+                        break;
+                    }
                 }
+                
                 state.wait(wakeup);
             }
 
@@ -396,10 +430,10 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
             proc_ = std::move(proc);
             fromReader_ = std::move(fromReader);
 
-            /* Add newly discovered job names to the queue. */
+            /* Add newly discovered job names to the global sorted queue. */
             {
                 auto state(state_.lock());
-                state->active.erase(attrPath);
+                state->activeCount--;
                 for (auto &p : newAttrs) {
                     state->todo.insert(p);
                 }
@@ -468,13 +502,19 @@ auto main(int argc, char **argv) -> int {
 
         nix::Sync<State> state_;
 
+        // Set the number of workers
+        {
+            auto state = state_.lock();
+            state->numWorkers = myArgs.nrWorkers;
+        }
+
         /* Start a collector thread per worker process. */
         std::vector<Thread> threads;
         std::condition_variable wakeup;
         threads.reserve(myArgs.nrWorkers);
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
-                [&state_, &wakeup] { collector(state_, wakeup); });
+                [&state_, &wakeup, i] { collector(state_, wakeup, i); });
         }
 
         for (auto &thread : threads) {
