@@ -121,44 +121,58 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
     auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
 
+    name = packageInfo.queryName();
+    system = packageInfo.querySystem();
+
+    // Handle outputs
     try {
         nix::PackageInfo::Outputs outputsQueried;
+
+        // In read-only mode, we can't query outputs with instantiation
+        bool canInstantiate = !nix::settings.readOnlyMode;
 
         // CA derivations do not have static output paths, so we have to
         // fallback if we encounter an error
         try {
-            outputsQueried = packageInfo.queryOutputs(true);
+            outputsQueried = packageInfo.queryOutputs(canInstantiate);
         } catch (const nix::Error &e) {
-            // We could be hitting `nix::UnimplementedError`:
-            // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
-            //
-            // Or we could be hitting:
-            // ```
-            // error: derivation 'caDependingOnCA' does not have valid outputs:
-            // error: while evaluating the output path of a derivation at
-            // <nix/derivation-internal.nix>:19:9:
-            //
-            //    18|       value = commonAttrs // {
-            //    19|         outPath = builtins.getAttr outputName strict;\n
-            //      |         ^
-            //    20|         drvPath = strict.drvPath;
-            //
-            // error: path
-            // '/0rmq7bvk2raajd310spvd416f2jajrabcg6ar706gjbd6b8nmvks' is not in
-            // the Nix store
-            // ```
-            // i.e. the placeholders were confusing it.
-            //
-            // FIXME: a better fix would be in Nix to first check if
-            // `outPath` is equal to the placeholder. See
-            // https://github.com/NixOS/nix/issues/11885.
-            if (!nix::experimentalFeatureSettings.isEnabled(
-                    nix::Xp::CaDerivations)) {
-                // If we do have CA derivations enabled, we should not encounter
-                // these errors.
-                throw;
+            if (nix::settings.readOnlyMode) {
+                // In read-only mode, we can't get outputs that require
+                // instantiation
+                outputsQueried = {};
+            } else {
+                // We could be hitting `nix::UnimplementedError`:
+                // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
+                //
+                // Or we could be hitting:
+                // ```
+                // error: derivation 'caDependingOnCA' does not have valid
+                // outputs: error: while evaluating the output path of a
+                // derivation at <nix/derivation-internal.nix>:19:9:
+                //
+                //    18|       value = commonAttrs // {
+                //    19|         outPath = builtins.getAttr outputName
+                //    strict;\n
+                //      |         ^
+                //    20|         drvPath = strict.drvPath;
+                //
+                // error: path
+                // '/0rmq7bvk2raajd310spvd416f2jajrabcg6ar706gjbd6b8nmvks' is
+                // not in the Nix store
+                // ```
+                // i.e. the placeholders were confusing it.
+                //
+                // FIXME: a better fix would be in Nix to first check if
+                // `outPath` is equal to the placeholder. See
+                // https://github.com/NixOS/nix/issues/11885.
+                if (!nix::experimentalFeatureSettings.isEnabled(
+                        nix::Xp::CaDerivations)) {
+                    // If we do have CA derivations enabled, we should not
+                    // encounter these errors.
+                    throw;
+                }
+                outputsQueried = packageInfo.queryOutputs(false);
             }
-            outputsQueried = packageInfo.queryOutputs(false);
         }
         for (auto &[outputName, optOutputPath] : outputsQueried) {
             if (optOutputPath) {
@@ -169,28 +183,51 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             }
         }
     } catch (const std::exception &e) {
-        state
-            .error<nix::EvalError>(
-                "derivation '%s' does not have valid outputs: %s", attrPath,
-                e.what())
-            .debugThrow();
+        if (!nix::settings.readOnlyMode) {
+            state
+                .error<nix::EvalError>(
+                    "derivation '%s' does not have valid outputs: %s", attrPath,
+                    e.what())
+                .debugThrow();
+        }
+        // In read-only mode, continue without outputs
     }
 
-    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
-    name = packageInfo.queryName();
+    // Handle derivation path and dependent operations
+    if (!nix::settings.readOnlyMode) {
+        drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
 
-    // Read the derivation once and use it for everything
-    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
-    system = drv.platform;
+        // Read the derivation once and use it for everything
+        auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
 
-    if (args.checkCacheStatus) {
-        // TODO: is this a bottleneck, where we should batch these queries?
-        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
-                                       neededSubstitutes, unknownPaths, drv);
+        if (args.checkCacheStatus) {
+            // TODO: is this a bottleneck, where we should batch these queries?
+            cacheStatus =
+                queryCacheStatus(*localStore, outputs, neededBuilds,
+                                 neededSubstitutes, unknownPaths, drv);
+        } else {
+            cacheStatus = Drv::CacheStatus::Unknown;
+        }
+
+        if (args.showInputDrvs) {
+            std::map<std::string, std::set<std::string>> drvs;
+            for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
+                std::set<std::string> inputDrvOutputs;
+                for (const auto &outputName : inputNode.value) {
+                    inputDrvOutputs.insert(outputName);
+                }
+                drvs[localStore->printStorePath(inputDrvPath)] =
+                    inputDrvOutputs;
+            }
+            inputDrvs = drvs;
+        }
     } else {
+        // In read-only mode, we can't get derivation paths
+        drvPath = "";
         cacheStatus = Drv::CacheStatus::Unknown;
     }
 
+    // Handle metadata (works in both modes)
     if (args.meta) {
         nlohmann::json meta_;
         for (const auto &metaName : packageInfo.queryMetaNames()) {
@@ -210,18 +247,6 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             meta_[metaName] = nlohmann::json::parse(ss.str());
         }
         meta = meta_;
-    }
-
-    if (args.showInputDrvs) {
-        std::map<std::string, std::set<std::string>> drvs;
-        for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
-            std::set<std::string> inputDrvOutputs;
-            for (const auto &outputName : inputNode.value) {
-                inputDrvOutputs.insert(outputName);
-            }
-            drvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
-        }
-        inputDrvs = drvs;
     }
 }
 

@@ -278,7 +278,8 @@ void worker(
                     /* Register the derivation as a GC root.  !!! This
                        registers roots for jobs that we may have already
                        done. */
-                    if (!args.gcRootsDir.empty()) {
+                    if (!args.gcRootsDir.empty() &&
+                        !nix::settings.readOnlyMode && !drv.drvPath.empty()) {
                         const nix::Path root =
                             args.gcRootsDir + "/" +
                             std::string(nix::baseNameOf(drv.drvPath));

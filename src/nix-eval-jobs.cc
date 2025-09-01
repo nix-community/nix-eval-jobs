@@ -446,6 +446,11 @@ auto main(int argc, char **argv) -> int {
          * causing "unexpected EOF" during eval */
         nix::settings.builders = "";
 
+        /* Set read-only mode if requested (makes evaluation faster) */
+        if (myArgs.readOnly) {
+            nix::settings.readOnlyMode = true;
+        }
+
         /* When building a flake, use pure evaluation (no access to
            'getEnv', 'currentSystem' etc. */
         if (myArgs.impure) {
