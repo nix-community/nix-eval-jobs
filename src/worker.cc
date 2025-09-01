@@ -24,6 +24,7 @@
 #include <nix/expr/eval.hh>
 #include <nix/util/file-system.hh>
 #include <nix/flake/flakeref.hh>
+#include <nix/flake/flake.hh>
 #include <nix/expr/get-drvs.hh>
 #include <nix/util/logging.hh>
 #include <nix/store/outputs-spec.hh>
@@ -74,6 +75,30 @@ auto releaseExprTopLevelValue(nix::EvalState &state, nix::Bindings &autoArgs,
     return vRoot;
 }
 
+auto evaluateFlake(nix::ref<nix::EvalState> state,
+                   const std::string &releaseExpr,
+                   const nix::flake::LockFlags &lockFlags) -> nix::Value * {
+    auto [flakeRef, fragment, outputSpec] =
+        nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
+            nix::fetchSettings, releaseExpr,
+            nix::absPath(std::filesystem::path(".")));
+
+    nix::InstallableFlake flake{{},       state,      std::move(flakeRef),
+                                fragment, outputSpec, {},
+                                {},       lockFlags};
+
+    // If no fragment specified, use callFlake to get the full flake structure
+    // (just like :lf in the REPL)
+    if (fragment.empty()) {
+        auto v = state->allocValue();
+        nix::flake::callFlake(*state, *flake.getLockedFlake(), *v);
+        return v;
+    } else {
+        // Fragment specified, use normal evaluation
+        return flake.toValue(*state).first;
+    }
+}
+
 auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
                            [](const std::string &ss, std::string s) {
@@ -98,19 +123,28 @@ void worker(
     nix::Bindings &autoArgs = *args.getAutoArgs(*state);
 
     nix::Value *vRoot = [&]() {
-        if (args.flake) {
-            auto [flakeRef, fragment, outputSpec] =
-                nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-                    nix::fetchSettings, args.releaseExpr,
-                    nix::absPath(std::filesystem::path(".")));
-            nix::InstallableFlake flake{
-                {}, state, std::move(flakeRef), fragment, outputSpec,
-                {}, {},    args.lockFlags};
+        nix::Value *vEvaluated =
+            args.flake ? evaluateFlake(state, args.releaseExpr, args.lockFlags)
+                       : releaseExprTopLevelValue(*state, autoArgs, args);
 
-            return flake.toValue(*state).first;
+        if (args.selectExpr.empty()) {
+            return vEvaluated;
         }
 
-        return releaseExprTopLevelValue(*state, autoArgs, args);
+        // Apply the provided select function
+        auto selectExpr =
+            state->parseExprFromString(args.selectExpr, state->rootPath("."));
+
+        nix::Value vSelect;
+        state->eval(selectExpr, vSelect);
+
+        nix::Value *vSelected = state->allocValue();
+        state->callFunction(vSelect, *vEvaluated, *vSelected, nix::noPos);
+        state->forceAttrs(
+            *vSelected, nix::noPos,
+            "'--select' must evaluate to an attrset (the traversal root)");
+
+        return vSelected;
     }();
 
     LineReader fromReader(from.release());

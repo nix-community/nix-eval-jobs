@@ -209,6 +209,28 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .experimentalFeature = std::nullopt,
     });
 
+    addFlag({
+        .longName = "select",
+        .aliases = {},
+        .shortName = 0,
+        .description =
+            "Apply provided Nix function to transform the evaluation root. "
+            "This is applied before any attribute traversal begins. "
+            "When used with --flake without a fragment, the function receives "
+            "an attrset with 'outputs' and 'inputs'. "
+            "When used with a flake fragment, it receives the selected "
+            "attribute. "
+            "Examples: "
+            "--select 'flake: flake.outputs.packages' "
+            "--select 'flake: flake.inputs.nixpkgs' "
+            "--select 'outputs: outputs.packages.x86_64-linux'",
+        .category = "",
+        .labels = {"expr"},
+        .handler = {&selectExpr},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
+
     // usually in MixFlakeOptions
     addFlag({
         .longName = "override-input",

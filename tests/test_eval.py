@@ -432,6 +432,64 @@ def test_apply() -> None:
         assert results[4]["extraValue"]["version"] is not None
 
 
+def test_select_flake() -> None:
+    """Test the --select option to filter flake outputs before evaluation"""
+    with TemporaryDirectory() as tempdir:
+        # Test 1: Select specific attributes from hydraJobs
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--flake",
+            ".#hydraJobs",
+            "--select",
+            "outputs: { inherit (outputs) builtJob substitutedJob; }",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        # Should only have the two selected jobs
+        assert len(results) == 2
+        attrs = {r["attr"] for r in results}
+        assert attrs == {"builtJob", "substitutedJob"}
+
+        # Test 2: Select from the whole flake (outputs and inputs)
+        # When using --flake . we get a structure with 'outputs' and 'inputs'
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--workers",
+            "1",
+            "--flake",
+            ".",
+            "--select",
+            "flake: flake.outputs.hydraJobs",  # Select just hydraJobs from outputs
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        # Should get the 5 hydraJobs
+        assert len(results) == 5
+        attrs = {r["attr"] for r in results}
+        assert "builtJob" in attrs
+        assert "substitutedJob" in attrs
+
+
 @pytest.mark.infiniterecursion
 def test_recursion_error() -> None:
     with TemporaryDirectory() as tempdir:
