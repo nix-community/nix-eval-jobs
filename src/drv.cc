@@ -40,8 +40,6 @@ auto queryCacheStatus(
     std::vector<std::string> &neededSubstitutes,
     std::vector<std::string> &unknownPaths, const nix::Derivation &drv)
     -> Drv::CacheStatus {
-    uint64_t downloadSize = 0;
-    uint64_t narSize = 0;
 
     std::vector<nix::StorePathWithOutputs> paths;
     // Add output paths
@@ -58,9 +56,6 @@ auto queryCacheStatus(
     }
 
     auto missing = store.queryMissing(toDerivedPaths(paths));
-
-    downloadSize = missing.downloadSize;
-    narSize = missing.narSize;
 
     if (!missing.willBuild.empty()) {
         // TODO: can we expose the topological sort order as a graph?
