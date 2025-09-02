@@ -42,26 +42,17 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
     try {
         nix::PackageInfo::Outputs outputsQueried;
 
-        // In no-instantiate mode, we can't query outputs with instantiation
-        bool canInstantiate = !nix::settings.readOnlyMode;
-
         // CA derivations do not have static output paths, so we have to
         // fallback if we encounter an error
         try {
-            outputsQueried = packageInfo.queryOutputs(canInstantiate);
+            outputsQueried = packageInfo.queryOutputs(true);
         } catch (const nix::Error &e) {
-            if (nix::settings.readOnlyMode) {
-                // In no-instantiate mode, we can't get outputs that require
-                // instantiation
-                outputsQueried = {};
-            } else {
-                // Handle CA derivation errors
-                if (!nix::experimentalFeatureSettings.isEnabled(
-                        nix::Xp::CaDerivations)) {
-                    throw;
-                }
-                outputsQueried = packageInfo.queryOutputs(false);
+            // Handle CA derivation errors
+            if (!nix::experimentalFeatureSettings.isEnabled(
+                    nix::Xp::CaDerivations)) {
+                throw;
             }
+            outputsQueried = packageInfo.queryOutputs(false);
         }
         for (auto &[outputName, optOutputPath] : outputsQueried) {
             if (optOutputPath) {
@@ -72,14 +63,11 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
             }
         }
     } catch (const std::exception &e) {
-        if (!nix::settings.readOnlyMode) {
-            state
-                .error<nix::EvalError>(
-                    "derivation '%s' does not have valid outputs: %s", attrPath,
-                    e.what())
-                .debugThrow();
-        }
-        // In no-instantiate mode, continue without outputs
+        state
+            .error<nix::EvalError>(
+                "derivation '%s' does not have valid outputs: %s", attrPath,
+                e.what())
+            .debugThrow();
     }
 
     return outputs;
