@@ -551,8 +551,14 @@ def test_no_instantiate_mode() -> None:
             # Name should still be present
             assert "name" in result
 
-            # Outputs should still be present but may be empty
+            # Outputs should still be present and populated
             assert "outputs" in result
+            assert isinstance(result["outputs"], dict)
+            # Most derivations should have at least an "out" output
+            if result["attr"] != "recurse.drvB":  # This one might be special
+                assert len(result["outputs"]) > 0
+                assert "out" in result["outputs"]
+                assert result["outputs"]["out"].startswith("/nix/store/")
 
             # Cache status should not be present (it's Unknown and not included)
             assert "cacheStatus" not in result
@@ -561,6 +567,13 @@ def test_no_instantiate_mode() -> None:
 
             # Input drvs should not be present (requires reading derivation from store)
             assert "inputDrvs" not in result
+
+        # Verify specific outputs for known derivations
+        built_job = next(r for r in results if r["attr"] == "builtJob")
+        assert built_job["outputs"]["out"].endswith("-job1")
+
+        substituted_job = next(r for r in results if r["attr"] == "substitutedJob")
+        assert "nix-" in substituted_job["outputs"]["out"]
 
         # No GC roots should be created in no-instantiate mode
         assert len(list(Path(tempdir).iterdir())) == 0
