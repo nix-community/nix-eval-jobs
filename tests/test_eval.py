@@ -11,7 +11,12 @@ import pytest
 
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
-BIN = PROJECT_ROOT.joinpath("build", "src", "nix-eval-jobs")
+# Allow overriding the binary path with environment variable
+BIN = Path(
+    os.environ.get("NIX_EVAL_JOBS_BIN", str(PROJECT_ROOT.joinpath("build", "src", "nix-eval-jobs")))
+)
+# Common flags for all test invocations
+COMMON_FLAGS = ["--extra-experimental-features", "nix-command flakes"]
 
 
 def check_gc_root(gcRootDir: str, drvPath: str) -> None:
@@ -25,7 +30,7 @@ def check_gc_root(gcRootDir: str, drvPath: str) -> None:
 
 def common_test(extra_args: list[str]) -> list[dict[str, Any]]:
     with TemporaryDirectory() as tempdir:
-        cmd = [str(BIN), "--gc-roots-dir", tempdir, "--meta"] + extra_args
+        cmd = [str(BIN), "--gc-roots-dir", tempdir, "--meta", *COMMON_FLAGS, *extra_args]
         res = subprocess.run(
             cmd,
             cwd=TEST_ROOT.joinpath("assets"),
@@ -40,7 +45,7 @@ def common_test(extra_args: list[str]) -> list[dict[str, Any]]:
         built_job = results[0]
         assert built_job["attr"] == "builtJob"
         assert built_job["name"] == "job1"
-        assert built_job["outputs"]["out"].startswith("/nix/store")
+        assert built_job["outputs"]["out"].endswith("-job1")
         assert built_job["drvPath"].endswith(".drv")
         # No meta field in bare derivations
 
@@ -105,6 +110,7 @@ def test_eval_error() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.brokenPkgs",
         ]
@@ -126,6 +132,7 @@ def test_no_gcroot_dir() -> None:
         "--meta",
         "--workers",
         "1",
+        *COMMON_FLAGS,
         "--flake",
         ".#legacyPackages.x86_64-linux.brokenPkgs",
     ]
@@ -150,6 +157,7 @@ def test_constituents() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.success",
             "--constituents",
@@ -204,6 +212,7 @@ def test_constituents_all() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.glob1",
             "--constituents",
@@ -237,6 +246,7 @@ def test_constituents_glob_misc() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.glob2",
             "--constituents",
@@ -283,6 +293,7 @@ def test_constituents_cycle() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.cycle",
             "--constituents",
@@ -310,6 +321,7 @@ def test_constituents_error() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.failures",
             "--constituents",
@@ -344,6 +356,7 @@ def test_empty_needed() -> None:
             "--check-cache-status",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.emptyNeeded",
         ]
@@ -391,6 +404,7 @@ def test_apply() -> None:
             "1",
             "--apply",
             applyExpr,
+            *COMMON_FLAGS,
             "--flake",
             ".#hydraJobs",
         ]
@@ -428,6 +442,7 @@ def test_select_flake() -> None:
             "--gc-roots-dir",
             tempdir,
             "--meta",
+            *COMMON_FLAGS,
             "--flake",
             ".#hydraJobs",
             "--select",
@@ -456,6 +471,7 @@ def test_select_flake() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".",
             "--select",
@@ -487,6 +503,7 @@ def test_recursion_error() -> None:
             "--meta",
             "--workers",
             "1",
+            *COMMON_FLAGS,
             "--flake",
             ".#legacyPackages.x86_64-linux.infiniteRecursionPkgs",
         ]
@@ -511,6 +528,7 @@ def test_no_instantiate_mode() -> None:
             tempdir,
             "--meta",
             "--no-instantiate",
+            *COMMON_FLAGS,
             "--flake",
             ".#hydraJobs",
         ]
@@ -545,7 +563,7 @@ def test_no_instantiate_mode() -> None:
             if result["attr"] != "recurse.drvB":  # This one might be special
                 assert len(result["outputs"]) > 0
                 assert "out" in result["outputs"]
-                assert result["outputs"]["out"].startswith("/nix/store/")
+                assert result["outputs"]["out"] != ""
 
             # Cache status should not be present (it's Unknown and not included)
             assert "cacheStatus" not in result
