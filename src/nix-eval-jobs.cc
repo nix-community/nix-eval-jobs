@@ -69,6 +69,13 @@ using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
 
 void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
                         const MyArgs &args) {
+    // Early exit if in read-only/no-instantiate mode
+    if (args.noInstantiate) {
+        nix::warn("constituents feature disabled in no-instantiate mode, "
+                  "skipping aggregate rewriting");
+        return;
+    }
+
     auto store = nix_eval_jobs::openStore(args.evalStoreUrl);
     auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
 
