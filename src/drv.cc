@@ -30,8 +30,93 @@
 
 #include "drv.hh"
 #include "eval-args.hh"
+#include "store.hh"
 
 namespace {
+
+auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
+                  const std::string &attrPath)
+    -> std::map<std::string, std::optional<std::string>> {
+    std::map<std::string, std::optional<std::string>> outputs;
+
+    try {
+        nix::PackageInfo::Outputs outputsQueried;
+
+        // In no-instantiate mode, we can't query outputs with instantiation
+        bool canInstantiate = !nix::settings.readOnlyMode;
+
+        // CA derivations do not have static output paths, so we have to
+        // fallback if we encounter an error
+        try {
+            outputsQueried = packageInfo.queryOutputs(canInstantiate);
+        } catch (const nix::Error &e) {
+            if (nix::settings.readOnlyMode) {
+                // In no-instantiate mode, we can't get outputs that require
+                // instantiation
+                outputsQueried = {};
+            } else {
+                // Handle CA derivation errors
+                if (!nix::experimentalFeatureSettings.isEnabled(
+                        nix::Xp::CaDerivations)) {
+                    throw;
+                }
+                outputsQueried = packageInfo.queryOutputs(false);
+            }
+        }
+        for (auto &[outputName, optOutputPath] : outputsQueried) {
+            if (optOutputPath) {
+                outputs[outputName] =
+                    state.store->printStorePath(*optOutputPath);
+            } else {
+                outputs[outputName] = std::nullopt;
+            }
+        }
+    } catch (const std::exception &e) {
+        if (!nix::settings.readOnlyMode) {
+            state
+                .error<nix::EvalError>(
+                    "derivation '%s' does not have valid outputs: %s", attrPath,
+                    e.what())
+                .debugThrow();
+        }
+        // In no-instantiate mode, continue without outputs
+    }
+
+    return outputs;
+}
+
+auto queryMeta(nix::PackageInfo &packageInfo, nix::EvalState &state)
+    -> std::optional<nlohmann::json> {
+    nlohmann::json meta_;
+    for (const auto &metaName : packageInfo.queryMetaNames()) {
+        nix::NixStringContext context;
+        std::stringstream ss;
+
+        auto *metaValue = packageInfo.queryMeta(metaName);
+        // Skip non-serialisable types
+        if (metaValue == nullptr) {
+            continue;
+        }
+
+        nix::printValueAsJSON(state, true, *metaValue, nix::noPos, ss, context);
+
+        meta_[metaName] = nlohmann::json::parse(ss.str());
+    }
+    return meta_;
+}
+
+auto queryInputDrvs(const nix::Derivation &drv, nix::Store &store)
+    -> std::map<std::string, std::set<std::string>> {
+    std::map<std::string, std::set<std::string>> drvs;
+    for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
+        std::set<std::string> inputDrvOutputs;
+        for (const auto &outputName : inputNode.value) {
+            inputDrvOutputs.insert(outputName);
+        }
+        drvs[store.printStorePath(inputDrvPath)] = inputDrvOutputs;
+    }
+    return drvs;
+}
 
 auto queryCacheStatus(
     nix::Store &store,
@@ -40,8 +125,6 @@ auto queryCacheStatus(
     std::vector<std::string> &neededSubstitutes,
     std::vector<std::string> &unknownPaths, const nix::Derivation &drv)
     -> Drv::CacheStatus {
-    uint64_t downloadSize = 0;
-    uint64_t narSize = 0;
 
     std::vector<nix::StorePathWithOutputs> paths;
     // Add output paths
@@ -58,9 +141,6 @@ auto queryCacheStatus(
     }
 
     auto missing = store.queryMissing(toDerivedPaths(paths));
-
-    downloadSize = missing.downloadSize;
-    narSize = missing.narSize;
 
     if (!missing.willBuild.empty()) {
         // TODO: can we expose the topological sort order as a graph?
@@ -119,109 +199,51 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
          std::optional<Constituents> constituents)
     : constituents(std::move(constituents)) {
 
-    auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
+    auto store = state.store;
 
-    try {
-        nix::PackageInfo::Outputs outputsQueried;
-
-        // CA derivations do not have static output paths, so we have to
-        // fallback if we encounter an error
-        try {
-            outputsQueried = packageInfo.queryOutputs(true);
-        } catch (const nix::Error &e) {
-            // We could be hitting `nix::UnimplementedError`:
-            // https://github.com/NixOS/nix/blob/39da9462e9c677026a805c5ee7ba6bb306f49c59/src/libexpr/get-drvs.cc#L106
-            //
-            // Or we could be hitting:
-            // ```
-            // error: derivation 'caDependingOnCA' does not have valid outputs:
-            // error: while evaluating the output path of a derivation at
-            // <nix/derivation-internal.nix>:19:9:
-            //
-            //    18|       value = commonAttrs // {
-            //    19|         outPath = builtins.getAttr outputName strict;\n
-            //      |         ^
-            //    20|         drvPath = strict.drvPath;
-            //
-            // error: path
-            // '/0rmq7bvk2raajd310spvd416f2jajrabcg6ar706gjbd6b8nmvks' is not in
-            // the Nix store
-            // ```
-            // i.e. the placeholders were confusing it.
-            //
-            // FIXME: a better fix would be in Nix to first check if
-            // `outPath` is equal to the placeholder. See
-            // https://github.com/NixOS/nix/issues/11885.
-            if (!nix::experimentalFeatureSettings.isEnabled(
-                    nix::Xp::CaDerivations)) {
-                // If we do have CA derivations enabled, we should not encounter
-                // these errors.
-                throw;
-            }
-            outputsQueried = packageInfo.queryOutputs(false);
-        }
-        for (auto &[outputName, optOutputPath] : outputsQueried) {
-            if (optOutputPath) {
-                outputs[outputName] =
-                    localStore->printStorePath(*optOutputPath);
-            } else {
-                outputs[outputName] = std::nullopt;
-            }
-        }
-    } catch (const std::exception &e) {
-        state
-            .error<nix::EvalError>(
-                "derivation '%s' does not have valid outputs: %s", attrPath,
-                e.what())
-            .debugThrow();
-    }
-
-    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
     name = packageInfo.queryName();
 
-    // Read the derivation once and use it for everything
-    auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
-    system = drv.platform;
+    // Query outputs using helper function
+    outputs = queryOutputs(packageInfo, state, attrPath);
+    drvPath = store->printStorePath(packageInfo.requireDrvPath());
 
-    if (args.checkCacheStatus) {
-        // TODO: is this a bottleneck, where we should batch these queries?
-        cacheStatus = queryCacheStatus(*localStore, outputs, neededBuilds,
-                                       neededSubstitutes, unknownPaths, drv);
+    // Check if we can read derivations (requires LocalFSStore and not in
+    // read-only mode)
+    auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+    bool canReadDerivation = localStore && !nix::settings.readOnlyMode;
+
+    if (canReadDerivation) {
+        // We can read the derivation directly for precise information
+        auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
+
+        // Use the more precise system from the derivation
+        system = drv.platform;
+
+        if (args.checkCacheStatus) {
+            // TODO: is this a bottleneck, where we should batch these queries?
+            cacheStatus =
+                queryCacheStatus(*store, outputs, neededBuilds,
+                                 neededSubstitutes, unknownPaths, drv);
+        } else {
+            cacheStatus = Drv::CacheStatus::Unknown;
+        }
+
+        if (args.showInputDrvs) {
+            inputDrvs = queryInputDrvs(drv, *store);
+        }
     } else {
+        // Fall back to basic info from PackageInfo
+        // This happens when:
+        // - In read-only/no-instantiate mode
+        // - Store is not a LocalFSStore (e.g., remote store)
+        system = packageInfo.querySystem();
         cacheStatus = Drv::CacheStatus::Unknown;
+        // Can't get input derivations without reading the .drv file
     }
 
+    // Handle metadata (works in both modes)
     if (args.meta) {
-        nlohmann::json meta_;
-        for (const auto &metaName : packageInfo.queryMetaNames()) {
-            nix::NixStringContext context;
-            std::stringstream ss;
-
-            auto *metaValue = packageInfo.queryMeta(metaName);
-            // Skip non-serialisable types
-            // TODO: Fix serialisation of derivations to store paths
-            if (metaValue == nullptr) {
-                continue;
-            }
-
-            nix::printValueAsJSON(state, true, *metaValue, nix::noPos, ss,
-                                  context);
-
-            meta_[metaName] = nlohmann::json::parse(ss.str());
-        }
-        meta = meta_;
-    }
-
-    if (args.showInputDrvs) {
-        std::map<std::string, std::set<std::string>> drvs;
-        for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
-            std::set<std::string> inputDrvOutputs;
-            for (const auto &outputName : inputNode.value) {
-                inputDrvOutputs.insert(outputName);
-            }
-            drvs[localStore->printStorePath(inputDrvPath)] = inputDrvOutputs;
-        }
-        inputDrvs = drvs;
+        meta = queryMeta(packageInfo, state);
     }
 }
 

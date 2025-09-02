@@ -513,3 +513,54 @@ def test_recursion_error() -> None:
         print(res.stderr)
         assert "packageWithInfiniteRecursion" in res.stderr
         assert "possible infinite recursion" in res.stderr
+
+
+def test_no_instantiate_mode() -> None:
+    """Test that --no-instantiate flag works correctly"""
+    with TemporaryDirectory() as tempdir:
+        cmd = [
+            str(BIN),
+            "--gc-roots-dir",
+            tempdir,
+            "--meta",
+            "--no-instantiate",
+            "--flake",
+            ".#hydraJobs",
+        ]
+        res = subprocess.run(
+            cmd,
+            cwd=TEST_ROOT.joinpath("assets"),
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+
+        results = [json.loads(r) for r in res.stdout.split("\n") if r]
+        assert len(results) == 5
+
+        # Check that all results have the expected structure
+        for result in results:
+            # In no-instantiate mode, drvPath should still be present (from the attr)
+            assert "drvPath" in result
+            assert result["drvPath"].endswith(".drv")
+
+            # System should still be present (from querySystem fallback)
+            assert "system" in result
+            assert result["system"] != ""
+
+            # Name should still be present
+            assert "name" in result
+
+            # Outputs should still be present but may be empty
+            assert "outputs" in result
+
+            # Cache status should not be present (it's Unknown and not included)
+            assert "cacheStatus" not in result
+            assert "neededBuilds" not in result
+            assert "neededSubstitutes" not in result
+
+            # Input drvs should not be present (requires reading derivation from store)
+            assert "inputDrvs" not in result
+
+        # No GC roots should be created in no-instantiate mode
+        assert len(list(Path(tempdir).iterdir())) == 0

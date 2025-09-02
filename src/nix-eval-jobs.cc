@@ -59,12 +59,60 @@
 #include "worker.hh"
 #include "strings-portable.hh"
 #include "constituents.hh"
+#include "store.hh"
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
                                      nix::AutoCloseFD &from)>;
+
+void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
+                        const MyArgs &args) {
+    // Early exit if in read-only/no-instantiate mode
+    if (args.noInstantiate) {
+        nix::warn("constituents feature disabled in no-instantiate mode, "
+                  "skipping aggregate rewriting");
+        return;
+    }
+
+    auto store = nix_eval_jobs::openStore(args.evalStoreUrl);
+    auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+
+    if (!localStore) {
+        nix::warn("constituents feature requires a local store, skipping "
+                  "aggregate rewriting");
+        return;
+    }
+
+    auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
+
+    std::visit(nix::overloaded{
+                   [&](const std::vector<AggregateJob> &namedConstituents) {
+                       rewriteAggregates(jobs, namedConstituents, localStoreRef,
+                                         args.gcRootsDir);
+                   },
+                   [&](const DependencyCycle &e) {
+                       nix::logger->log(nix::lvlError,
+                                        nix::fmt("Found dependency cycle "
+                                                 "between jobs '%s' and '%s'",
+                                                 e.a, e.b));
+                       jobs[e.a]["error"] = e.message();
+                       jobs[e.b]["error"] = e.message();
+
+                       std::cout << jobs[e.a].dump() << "\n"
+                                 << jobs[e.b].dump() << "\n";
+
+                       for (const auto &jobName : e.remainingAggregates) {
+                           jobs[jobName]["error"] =
+                               "Skipping aggregate because of a dependency "
+                               "cycle";
+                           std::cout << jobs[jobName].dump() << "\n";
+                       }
+                   },
+               },
+               resolveNamedConstituents(jobs));
+}
 
 struct OutputStreamLock {
   private:
@@ -446,6 +494,11 @@ auto main(int argc, char **argv) -> int {
          * causing "unexpected EOF" during eval */
         nix::settings.builders = "";
 
+        /* Set no-instantiate mode if requested (makes evaluation faster) */
+        if (myArgs.noInstantiate) {
+            nix::settings.readOnlyMode = true;
+        }
+
         /* When building a flake, use pure evaluation (no access to
            'getEnv', 'currentSystem' etc. */
         if (myArgs.impure) {
@@ -488,36 +541,7 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.constituents) {
-            auto store = myArgs.evalStoreUrl
-                             ? nix::openStore(*myArgs.evalStoreUrl)
-                             : nix::openStore();
-
-            std::visit(
-                nix::overloaded{
-                    [&](const std::vector<AggregateJob> &namedConstituents) {
-                        rewriteAggregates(state->jobs, namedConstituents, store,
-                                          myArgs.gcRootsDir);
-                    },
-                    [&](const DependencyCycle &e) {
-                        nix::logger->log(nix::lvlError,
-                                         nix::fmt("Found dependency cycle "
-                                                  "between jobs '%s' and '%s'",
-                                                  e.a, e.b));
-                        state->jobs[e.a]["error"] = e.message();
-                        state->jobs[e.b]["error"] = e.message();
-
-                        std::cout << state->jobs[e.a].dump() << "\n"
-                                  << state->jobs[e.b].dump() << "\n";
-
-                        for (const auto &jobName : e.remainingAggregates) {
-                            state->jobs[jobName]["error"] =
-                                "Skipping aggregate because of a dependency "
-                                "cycle";
-                            std::cout << state->jobs[jobName].dump() << "\n";
-                        }
-                    },
-                },
-                resolveNamedConstituents(state->jobs));
+            handleConstituents(state->jobs, myArgs);
         }
     });
 }

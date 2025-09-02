@@ -10,6 +10,7 @@
 
 #include <nix/util/fmt.hh>
 #include <nix/store/store-api.hh>
+#include <nix/store/local-fs-store.hh>
 
 struct DependencyCycle : public std::exception {
     std::string a;
@@ -41,4 +42,5 @@ auto resolveNamedConstituents(const std::map<std::string, nlohmann::json> &jobs)
 
 void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
                        const std::vector<AggregateJob> &aggregateJobs,
-                       nix::ref<nix::Store> &store, nix::Path &gcRootsDir);
+                       const nix::ref<nix::LocalFSStore> &store,
+                       const nix::Path &gcRootsDir);

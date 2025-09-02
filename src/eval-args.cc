@@ -183,6 +183,19 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     });
 
     addFlag({
+        .longName = "no-instantiate",
+        .aliases = {},
+        .shortName = 0,
+        .description =
+            "don't instantiate (write) derivations, only evaluate (faster)",
+        .category = "",
+        .labels = {},
+        .handler = {&noInstantiate, true},
+        .completer = nullptr,
+        .experimentalFeature = std::nullopt,
+    });
+
+    addFlag({
         .longName = "expr",
         .aliases = {},
         .shortName = 'E',
