@@ -446,8 +446,8 @@ auto main(int argc, char **argv) -> int {
          * causing "unexpected EOF" during eval */
         nix::settings.builders = "";
 
-        /* Set read-only mode if requested (makes evaluation faster) */
-        if (myArgs.readOnly) {
+        /* Set no-instantiate mode if requested (makes evaluation faster) */
+        if (myArgs.noInstantiate) {
             nix::settings.readOnlyMode = true;
         }
 

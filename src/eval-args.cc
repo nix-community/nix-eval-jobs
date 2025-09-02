@@ -183,14 +183,14 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     });
 
     addFlag({
-        .longName = "read-only",
+        .longName = "no-instantiate",
         .aliases = {},
         .shortName = 0,
         .description =
-            "read-only mode, don't write derivations to store (faster)",
+            "don't instantiate (write) derivations, only evaluate (faster)",
         .category = "",
         .labels = {},
-        .handler = {&readOnly, true},
+        .handler = {&noInstantiate, true},
         .completer = nullptr,
         .experimentalFeature = std::nullopt,
     });

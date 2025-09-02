@@ -42,7 +42,7 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
     try {
         nix::PackageInfo::Outputs outputsQueried;
 
-        // In read-only mode, we can't query outputs with instantiation
+        // In no-instantiate mode, we can't query outputs with instantiation
         bool canInstantiate = !nix::settings.readOnlyMode;
 
         // CA derivations do not have static output paths, so we have to
@@ -51,7 +51,7 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
             outputsQueried = packageInfo.queryOutputs(canInstantiate);
         } catch (const nix::Error &e) {
             if (nix::settings.readOnlyMode) {
-                // In read-only mode, we can't get outputs that require
+                // In no-instantiate mode, we can't get outputs that require
                 // instantiation
                 outputsQueried = {};
             } else {
@@ -79,7 +79,7 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
                     e.what())
                 .debugThrow();
         }
-        // In read-only mode, continue without outputs
+        // In no-instantiate mode, continue without outputs
     }
 
     return outputs;
@@ -205,11 +205,15 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
 
     // Query outputs using helper function
     outputs = queryOutputs(packageInfo, state, attrPath);
+    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
 
     // Handle derivation path and dependent operations
-    if (!nix::settings.readOnlyMode) {
-        drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
-
+    if (nix::settings.readOnlyMode) {
+        // In no-instantiate mode, we can't get derivation paths
+        cacheStatus = Drv::CacheStatus::Unknown;
+        // Fall back to querySystem when we can't read the derivation
+        system = packageInfo.querySystem();
+    } else {
         // Read the derivation once and use it for everything
         auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
 
@@ -228,12 +232,6 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         if (args.showInputDrvs) {
             inputDrvs = queryInputDrvs(drv, *localStore);
         }
-    } else {
-        // In read-only mode, we can't get derivation paths
-        drvPath = "";
-        cacheStatus = Drv::CacheStatus::Unknown;
-        // Fall back to querySystem when we can't read the derivation
-        system = packageInfo.querySystem();
     }
 
     // Handle metadata (works in both modes)
