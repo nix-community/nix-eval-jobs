@@ -1,30 +1,54 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-
   outputs =
-    { self, nixpkgs, ... }:
+    { self, ... }:
     let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      system = "x86_64-linux";
+
+      # Simple replacement for writeText
+      makeTextDrv =
+        name: text:
+        derivation {
+          inherit name system;
+          builder = "/bin/sh";
+          args = [
+            "-c"
+            "echo '${text}' > $out"
+          ];
+        };
     in
     {
-      hydraJobs = import ./ci.nix { inherit pkgs; };
+      hydraJobs = import ./ci.nix { inherit system; };
 
       legacyPackages.x86_64-linux = {
         emptyNeeded = rec {
           # This is a reproducer for issue #369 where neededBuilds and neededSubstitutes are empty
           # when they should contain values
-          inherit (pkgs) nginx;
+          nginx = derivation {
+            name = "nginx-1.24.0";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo 'content' > $out"
+            ];
+          };
           proxyWrapper = derivation {
             name = "proxyWrapper";
             system = "aarch64-linux";
             builder = "/bin/sh";
-            inherit (pkgs) nginx;
+            args = [
+              "-c"
+              "echo '${nginx}' > $out"
+            ];
           };
           webService = derivation {
             name = "webService";
             system = "aarch64-linux";
             builder = "/bin/sh";
-            inherit proxyWrapper;
+            args = [
+              "-c"
+              "echo '${proxyWrapper}' > $out"
+            ];
           };
         };
         brokenPkgs = {
@@ -36,117 +60,207 @@
               recursion = [ recursion ];
             in
             derivation {
-              inherit (pkgs) system;
+              inherit system;
               name = "drvB";
               recursiveAttr = recursion;
               builder = ":";
             };
         };
         success = {
-          indirect_aggregate =
-            pkgs.runCommand "indirect_aggregate"
-              {
-                _hydraAggregate = true;
-                constituents = [
-                  "anotherone"
-                ];
-              }
-              ''
-                touch $out
-              '';
-          direct_aggregate =
-            pkgs.runCommand "direct_aggregate"
-              {
-                _hydraAggregate = true;
-                constituents = [
-                  self.hydraJobs.builtJob
-                ];
-              }
-              ''
-                touch $out
-              '';
-          mixed_aggregate =
-            pkgs.runCommand "mixed_aggregate"
-              {
-                _hydraAggregate = true;
-                constituents = [
-                  self.hydraJobs.builtJob
-                  "anotherone"
-                ];
-              }
-              ''
-                touch $out
-              '';
-          anotherone = pkgs.writeText "constituent" "text";
+          indirect_aggregate = derivation {
+            name = "indirect_aggregate";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+            _hydraAggregate = true;
+            constituents = [
+              "anotherone"
+            ];
+          };
+          direct_aggregate = derivation {
+            name = "direct_aggregate";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+            _hydraAggregate = true;
+            constituents = [
+              self.hydraJobs.builtJob
+            ];
+          };
+          mixed_aggregate = derivation {
+            name = "mixed_aggregate";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+            _hydraAggregate = true;
+            constituents = [
+              self.hydraJobs.builtJob
+              "anotherone"
+            ];
+          };
+          anotherone = makeTextDrv "constituent" "text";
         };
         failures = {
-          aggregate =
-            pkgs.runCommand "aggregate"
-              {
-                _hydraAggregate = true;
-                constituents = [
-                  "doesntexist"
-                  "doesnteval"
-                ];
-              }
-              ''
-                touch $out
-              '';
-          doesnteval = pkgs.writeText "constituent" (toString { });
+          aggregate = derivation {
+            name = "aggregate";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+            _hydraAggregate = true;
+            constituents = [
+              "doesntexist"
+              "doesnteval"
+            ];
+          };
+          doesnteval = makeTextDrv "constituent" (toString { });
         };
         glob1 = {
-          constituentA = pkgs.runCommand "constituentA" { } "touch $out";
-          constituentB = pkgs.runCommand "constituentB" { } "touch $out";
-          aggregate = pkgs.runCommand "aggregate" {
+          constituentA = derivation {
+            name = "constituentA";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+          };
+          constituentB = derivation {
+            name = "constituentB";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
+          };
+          aggregate = derivation {
+            name = "aggregate";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             _hydraGlobConstituents = true;
             constituents = [ "*" ];
-          } "touch $out";
+          };
         };
         cycle = {
-          aggregate0 = pkgs.runCommand "aggregate0" {
+          aggregate0 = derivation {
+            name = "aggregate0";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             _hydraGlobConstituents = true;
             constituents = [ "aggregate1" ];
-          } "touch $out";
-          aggregate1 = pkgs.runCommand "aggregate1" {
+          };
+          aggregate1 = derivation {
+            name = "aggregate1";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             _hydraGlobConstituents = true;
             constituents = [ "aggregate0" ];
-          } "touch $out";
+          };
         };
         glob2 = rec {
-          packages = pkgs.recurseIntoAttrs {
-            constituentA = pkgs.runCommand "constituentA" { } "touch $out";
-            constituentB = pkgs.runCommand "constituentB" { } "touch $out";
+          packages = {
+            recurseForDerivations = true;
+            constituentA = derivation {
+              name = "constituentA";
+              inherit system;
+              builder = "/bin/sh";
+              args = [
+                "-c"
+                "echo done > $out"
+              ];
+            };
+            constituentB = derivation {
+              name = "constituentB";
+              inherit system;
+              builder = "/bin/sh";
+              args = [
+                "-c"
+                "echo done > $out"
+              ];
+            };
           };
-          aggregate0 = pkgs.runCommand "aggregate0" {
+          aggregate0 = derivation {
+            name = "aggregate0";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             _hydraGlobConstituents = true;
             constituents = [
               "packages.*"
             ];
-          } "touch $out";
-          aggregate1 = pkgs.runCommand "aggregate1" {
+          };
+          aggregate1 = derivation {
+            name = "aggregate1";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             _hydraGlobConstituents = true;
             constituents = [
               "tests.*"
             ];
-          } "touch $out";
-          indirect_aggregate0 = pkgs.runCommand "indirect_aggregate0" {
+          };
+          indirect_aggregate0 = derivation {
+            name = "indirect_aggregate0";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             constituents = [
               "aggregate0"
             ];
-          } "touch $out";
-          mix_aggregate0 = pkgs.runCommand "mix_aggregate0" {
+          };
+          mix_aggregate0 = derivation {
+            name = "mix_aggregate0";
+            inherit system;
+            builder = "/bin/sh";
+            args = [
+              "-c"
+              "echo done > $out"
+            ];
             _hydraAggregate = true;
             constituents = [
               "aggregate0"
               packages.constituentA
             ];
-          } "touch $out";
+          };
         };
       };
     };

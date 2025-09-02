@@ -1,22 +1,38 @@
 {
-  pkgs ? import (builtins.getFlake (toString ./.)).inputs.nixpkgs { },
-  system ? pkgs.system,
+  system ? "x86_64-linux",
 }:
 
 let
-  dep-a = pkgs.runCommand "dep-a" { } ''
-    mkdir -p $out
-    echo "bbbbbb" > $out/dep-b
-  '';
+  dep-a = derivation {
+    name = "dep-a";
+    inherit system;
+    builder = "/bin/sh";
+    args = [
+      "-c"
+      "echo 'bbbbbb' > $out"
+    ];
+  };
 
-  dep-b = pkgs.runCommand "dep-b" { } ''
-    mkdir -p $out
-    echo "aaaaaa" > $out/dep-b
-  '';
+  dep-b = derivation {
+    name = "dep-b";
+    inherit system;
+    builder = "/bin/sh";
+    args = [
+      "-c"
+      "echo 'aaaaaa' > $out"
+    ];
+  };
 in
 {
-  builtJob = pkgs.writeText "job1" "job1";
-  substitutedJob = pkgs.nix;
+  builtJob = derivation {
+    name = "job1";
+    inherit system;
+    builder = "/bin/sh";
+    args = [
+      "-c"
+      "echo 'job1' > $out"
+    ];
+  };
 
   dontRecurse = {
     # This shouldn't build as `recurseForDerivations = true;` is not set
@@ -30,13 +46,25 @@ in
     };
   };
 
-  "dotted.attr" = pkgs.nix;
+  "dotted.attr" = derivation {
+    name = "dotted";
+    inherit system;
+    builder = "/bin/sh";
+    args = [
+      "-c"
+      "echo 'dotted' > $out"
+    ];
+  };
 
-  package-with-deps = pkgs.runCommand "package-with-deps" { } ''
-    mkdir -p $out
-    cp -r ${dep-a} $out/dep-a
-    cp -r ${dep-b} $out/dep-b
-  '';
+  package-with-deps = derivation {
+    name = "package-with-deps";
+    inherit system;
+    builder = "/bin/sh";
+    args = [
+      "-c"
+      "echo '${dep-a} ${dep-b}' > $out"
+    ];
+  };
 
   recurse = {
     # This should build

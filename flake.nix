@@ -18,7 +18,6 @@
     inputs@{ flake-parts, ... }:
     let
       inherit (inputs.nixpkgs) lib;
-      inherit (inputs) self;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -50,7 +49,6 @@
             }
           );
           drvArgs = {
-            srcDir = self;
             inherit nixComponents;
           };
         in
@@ -66,6 +64,42 @@
 
           checks = builtins.removeAttrs self'.packages [ "default" ] // {
             shell = self'.devShells.default;
+            tests =
+              pkgs.runCommand "nix-eval-jobs-tests"
+                {
+                  src = lib.fileset.toSource {
+                    fileset = lib.fileset.unions [
+                      ./tests
+                    ];
+                    root = ./.;
+                  };
+
+                  buildInputs = [
+                    self'.packages.nix-eval-jobs
+                    (pkgs.python3.withPackages (ps: [ ps.pytest ]))
+                  ];
+                }
+                ''
+                  # Copy test files
+                  cp -r $src/tests .
+
+                  # Set up test environment
+                  export HOME=$TMPDIR
+                  export NIX_STATE_DIR=$TMPDIR/nix-state
+                  export NIX_STORE_DIR=$TMPDIR/nix-store
+                  export NIX_DATA_DIR=$TMPDIR/nix-data
+                  export NIX_LOG_DIR=$TMPDIR/nix-log
+                  export NIX_CONF_DIR=$TMPDIR/nix-conf
+
+                  # Use the pre-built nix-eval-jobs binary
+                  export NIX_EVAL_JOBS_BIN=${self'.packages.nix-eval-jobs}/bin/nix-eval-jobs
+
+                  # Run the tests
+                  python -m pytest tests/ -v
+
+                  # Create output marker
+                  touch $out
+                '';
             clang-tidy-fix = self'.packages.nix-eval-jobs.overrideAttrs (old: {
               nativeBuildInputs = old.nativeBuildInputs ++ [
                 pkgs.git
