@@ -67,6 +67,45 @@ MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
                                      nix::AutoCloseFD &from)>;
 
+void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
+                        const MyArgs &args) {
+    auto store = nix_eval_jobs::openStore(args.evalStoreUrl);
+    auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+
+    if (!localStore) {
+        nix::warn("constituents feature requires a local store, skipping "
+                  "aggregate rewriting");
+        return;
+    }
+
+    auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
+    std::visit(nix::overloaded{
+                   [&](const std::vector<AggregateJob> &namedConstituents) {
+                       rewriteAggregates(jobs, namedConstituents, localStoreRef,
+                                         const_cast<MyArgs &>(args).gcRootsDir);
+                   },
+                   [&](const DependencyCycle &e) {
+                       nix::logger->log(nix::lvlError,
+                                        nix::fmt("Found dependency cycle "
+                                                 "between jobs '%s' and '%s'",
+                                                 e.a, e.b));
+                       jobs[e.a]["error"] = e.message();
+                       jobs[e.b]["error"] = e.message();
+
+                       std::cout << jobs[e.a].dump() << "\n"
+                                 << jobs[e.b].dump() << "\n";
+
+                       for (const auto &jobName : e.remainingAggregates) {
+                           jobs[jobName]["error"] =
+                               "Skipping aggregate because of a dependency "
+                               "cycle";
+                           std::cout << jobs[jobName].dump() << "\n";
+                       }
+                   },
+               },
+               resolveNamedConstituents(jobs));
+}
+
 struct OutputStreamLock {
   private:
     std::mutex mutex;
@@ -494,40 +533,7 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.constituents) {
-            auto store = nix_eval_jobs::openStore(myArgs.evalStoreUrl);
-            auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
-            
-            if (!localStore) {
-                nix::warn("constituents feature requires a local store, skipping aggregate rewriting");
-            } else {
-                auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
-                std::visit(
-                    nix::overloaded{
-                        [&](const std::vector<AggregateJob> &namedConstituents) {
-                            rewriteAggregates(state->jobs, namedConstituents, localStoreRef,
-                                              myArgs.gcRootsDir);
-                        },
-                        [&](const DependencyCycle &e) {
-                            nix::logger->log(nix::lvlError,
-                                             nix::fmt("Found dependency cycle "
-                                                      "between jobs '%s' and '%s'",
-                                                      e.a, e.b));
-                            state->jobs[e.a]["error"] = e.message();
-                            state->jobs[e.b]["error"] = e.message();
-
-                            std::cout << state->jobs[e.a].dump() << "\n"
-                                      << state->jobs[e.b].dump() << "\n";
-
-                            for (const auto &jobName : e.remainingAggregates) {
-                                state->jobs[jobName]["error"] =
-                                    "Skipping aggregate because of a dependency "
-                                    "cycle";
-                                std::cout << state->jobs[jobName].dump() << "\n";
-                            }
-                        },
-                    },
-                    resolveNamedConstituents(state->jobs));
-            }
+            handleConstituents(state->jobs, myArgs);
         }
     });
 }
