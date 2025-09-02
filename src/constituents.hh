@@ -42,5 +42,5 @@ auto resolveNamedConstituents(const std::map<std::string, nlohmann::json> &jobs)
 
 void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
                        const std::vector<AggregateJob> &aggregateJobs,
-                       nix::ref<nix::LocalFSStore> &store,
-                       nix::Path &gcRootsDir);
+                       const nix::ref<nix::LocalFSStore> &store,
+                       const nix::Path &gcRootsDir);

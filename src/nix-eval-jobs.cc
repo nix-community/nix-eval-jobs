@@ -86,10 +86,11 @@ void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
     }
 
     auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
+
     std::visit(nix::overloaded{
                    [&](const std::vector<AggregateJob> &namedConstituents) {
                        rewriteAggregates(jobs, namedConstituents, localStoreRef,
-                                         const_cast<MyArgs &>(args).gcRootsDir);
+                                         args.gcRootsDir);
                    },
                    [&](const DependencyCycle &e) {
                        nix::logger->log(nix::lvlError,
