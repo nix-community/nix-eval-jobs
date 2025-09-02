@@ -151,7 +151,8 @@ auto resolveNamedConstituents(const std::map<std::string, nlohmann::json> &jobs)
 
 void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
                        const std::vector<AggregateJob> &aggregateJobs,
-                       nix::ref<nix::Store> &store, nix::Path &gcRootsDir) {
+                       nix::ref<nix::LocalFSStore> &store,
+                       nix::Path &gcRootsDir) {
     for (const auto &aggregateJob : aggregateJobs) {
         auto &job = jobs.find(aggregateJob.name)->second;
         auto drvPath = store->parseStorePath(std::string(job["drvPath"]));
@@ -191,16 +192,13 @@ void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
             /* Register the derivation as a GC root.  !!! This
                 registers roots for jobs that we may have already
                 done. */
-            auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
             if (!gcRootsDir.empty()) {
                 const nix::Path root =
                     gcRootsDir + "/" +
                     std::string(nix::baseNameOf(newDrvPathS));
 
                 if (!nix::pathExists(root)) {
-                    auto localStore =
-                        store.dynamic_pointer_cast<nix::LocalFSStore>();
-                    localStore->addPermRoot(newDrvPath, root);
+                    store->addPermRoot(newDrvPath, root);
                 }
             }
 

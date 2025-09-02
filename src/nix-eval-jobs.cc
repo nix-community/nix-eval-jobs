@@ -59,6 +59,7 @@
 #include "worker.hh"
 #include "strings-portable.hh"
 #include "constituents.hh"
+#include "store.hh"
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -493,36 +494,40 @@ auto main(int argc, char **argv) -> int {
         }
 
         if (myArgs.constituents) {
-            auto store = myArgs.evalStoreUrl
-                             ? nix::openStore(*myArgs.evalStoreUrl)
-                             : nix::openStore();
+            auto store = nix_eval_jobs::openStore(myArgs.evalStoreUrl);
+            auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+            
+            if (!localStore) {
+                nix::warn("constituents feature requires a local store, skipping aggregate rewriting");
+            } else {
+                auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
+                std::visit(
+                    nix::overloaded{
+                        [&](const std::vector<AggregateJob> &namedConstituents) {
+                            rewriteAggregates(state->jobs, namedConstituents, localStoreRef,
+                                              myArgs.gcRootsDir);
+                        },
+                        [&](const DependencyCycle &e) {
+                            nix::logger->log(nix::lvlError,
+                                             nix::fmt("Found dependency cycle "
+                                                      "between jobs '%s' and '%s'",
+                                                      e.a, e.b));
+                            state->jobs[e.a]["error"] = e.message();
+                            state->jobs[e.b]["error"] = e.message();
 
-            std::visit(
-                nix::overloaded{
-                    [&](const std::vector<AggregateJob> &namedConstituents) {
-                        rewriteAggregates(state->jobs, namedConstituents, store,
-                                          myArgs.gcRootsDir);
+                            std::cout << state->jobs[e.a].dump() << "\n"
+                                      << state->jobs[e.b].dump() << "\n";
+
+                            for (const auto &jobName : e.remainingAggregates) {
+                                state->jobs[jobName]["error"] =
+                                    "Skipping aggregate because of a dependency "
+                                    "cycle";
+                                std::cout << state->jobs[jobName].dump() << "\n";
+                            }
+                        },
                     },
-                    [&](const DependencyCycle &e) {
-                        nix::logger->log(nix::lvlError,
-                                         nix::fmt("Found dependency cycle "
-                                                  "between jobs '%s' and '%s'",
-                                                  e.a, e.b));
-                        state->jobs[e.a]["error"] = e.message();
-                        state->jobs[e.b]["error"] = e.message();
-
-                        std::cout << state->jobs[e.a].dump() << "\n"
-                                  << state->jobs[e.b].dump() << "\n";
-
-                        for (const auto &jobName : e.remainingAggregates) {
-                            state->jobs[jobName]["error"] =
-                                "Skipping aggregate because of a dependency "
-                                "cycle";
-                            std::cout << state->jobs[jobName].dump() << "\n";
-                        }
-                    },
-                },
-                resolveNamedConstituents(state->jobs));
+                    resolveNamedConstituents(state->jobs));
+            }
         }
     });
 }

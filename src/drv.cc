@@ -30,13 +30,13 @@
 
 #include "drv.hh"
 #include "eval-args.hh"
+#include "store.hh"
 
 namespace {
 
 auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
                   const std::string &attrPath)
     -> std::map<std::string, std::optional<std::string>> {
-    auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
     std::map<std::string, std::optional<std::string>> outputs;
 
     try {
@@ -66,7 +66,7 @@ auto queryOutputs(nix::PackageInfo &packageInfo, nix::EvalState &state,
         for (auto &[outputName, optOutputPath] : outputsQueried) {
             if (optOutputPath) {
                 outputs[outputName] =
-                    localStore->printStorePath(*optOutputPath);
+                    state.store->printStorePath(*optOutputPath);
             } else {
                 outputs[outputName] = std::nullopt;
             }
@@ -105,7 +105,7 @@ auto queryMeta(nix::PackageInfo &packageInfo, nix::EvalState &state)
     return meta_;
 }
 
-auto queryInputDrvs(const nix::Derivation &drv, nix::LocalFSStore &localStore)
+auto queryInputDrvs(const nix::Derivation &drv, nix::Store &store)
     -> std::map<std::string, std::set<std::string>> {
     std::map<std::string, std::set<std::string>> drvs;
     for (const auto &[inputDrvPath, inputNode] : drv.inputDrvs.map) {
@@ -113,7 +113,7 @@ auto queryInputDrvs(const nix::Derivation &drv, nix::LocalFSStore &localStore)
         for (const auto &outputName : inputNode.value) {
             inputDrvOutputs.insert(outputName);
         }
-        drvs[localStore.printStorePath(inputDrvPath)] = inputDrvOutputs;
+        drvs[store.printStorePath(inputDrvPath)] = inputDrvOutputs;
     }
     return drvs;
 }
@@ -199,22 +199,21 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
          std::optional<Constituents> constituents)
     : constituents(std::move(constituents)) {
 
-    auto localStore = state.store.dynamic_pointer_cast<nix::LocalFSStore>();
+    auto store = state.store;
 
     name = packageInfo.queryName();
 
     // Query outputs using helper function
     outputs = queryOutputs(packageInfo, state, attrPath);
-    drvPath = localStore->printStorePath(packageInfo.requireDrvPath());
+    drvPath = store->printStorePath(packageInfo.requireDrvPath());
 
-    // Handle derivation path and dependent operations
-    if (nix::settings.readOnlyMode) {
-        // In no-instantiate mode, we can't get derivation paths
-        cacheStatus = Drv::CacheStatus::Unknown;
-        // Fall back to querySystem when we can't read the derivation
-        system = packageInfo.querySystem();
-    } else {
-        // Read the derivation once and use it for everything
+    // Check if we can read derivations (requires LocalFSStore and not in
+    // read-only mode)
+    auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+    bool canReadDerivation = localStore && !nix::settings.readOnlyMode;
+
+    if (canReadDerivation) {
+        // We can read the derivation directly for precise information
         auto drv = localStore->readDerivation(packageInfo.requireDrvPath());
 
         // Use the more precise system from the derivation
@@ -223,15 +222,23 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         if (args.checkCacheStatus) {
             // TODO: is this a bottleneck, where we should batch these queries?
             cacheStatus =
-                queryCacheStatus(*localStore, outputs, neededBuilds,
+                queryCacheStatus(*store, outputs, neededBuilds,
                                  neededSubstitutes, unknownPaths, drv);
         } else {
             cacheStatus = Drv::CacheStatus::Unknown;
         }
 
         if (args.showInputDrvs) {
-            inputDrvs = queryInputDrvs(drv, *localStore);
+            inputDrvs = queryInputDrvs(drv, *store);
         }
+    } else {
+        // Fall back to basic info from PackageInfo
+        // This happens when:
+        // - In read-only/no-instantiate mode
+        // - Store is not a LocalFSStore (e.g., remote store)
+        system = packageInfo.querySystem();
+        cacheStatus = Drv::CacheStatus::Unknown;
+        // Can't get input derivations without reading the .drv file
     }
 
     // Handle metadata (works in both modes)

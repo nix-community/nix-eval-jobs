@@ -50,6 +50,7 @@
 #include "drv.hh"
 #include "buffered-io.hh"
 #include "eval-args.hh"
+#include "store.hh"
 
 namespace nix {
 struct Expr;
@@ -116,8 +117,7 @@ void worker(
     nix::AutoCloseFD &to, // NOLINT(bugprone-easily-swappable-parameters)
     nix::AutoCloseFD &from) {
 
-    auto evalStore = args.evalStoreUrl ? nix::openStore(*args.evalStoreUrl)
-                                       : nix::openStore();
+    auto evalStore = nix_eval_jobs::openStore(args.evalStoreUrl);
     auto state = nix::make_ref<nix::EvalState>(
         args.lookupPath, evalStore, nix::fetchSettings, nix::evalSettings);
     nix::Bindings &autoArgs = *args.getAutoArgs(*state);
@@ -287,9 +287,12 @@ void worker(
                             auto localStore =
                                 state->store
                                     .dynamic_pointer_cast<nix::LocalFSStore>();
-                            auto storePath =
-                                localStore->parseStorePath(drv.drvPath);
-                            localStore->addPermRoot(storePath, root);
+                            if (localStore) {
+                                auto storePath =
+                                    localStore->parseStorePath(drv.drvPath);
+                                localStore->addPermRoot(storePath, root);
+                            }
+                            // If not a local store, we can't create GC roots
                         }
                     }
                 } else {
