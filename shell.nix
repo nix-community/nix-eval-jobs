@@ -15,13 +15,12 @@
   ),
   stdenv ? pkgs.stdenv,
   lib ? pkgs.lib,
-  srcDir ? null,
   nixComponents,
 }:
 
 let
   nix-eval-jobs = pkgs.callPackage ./default.nix {
-    inherit srcDir nixComponents;
+    inherit nixComponents;
   };
 in
 (pkgs.mkShell.override { inherit stdenv; }) {

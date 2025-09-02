@@ -18,7 +18,6 @@
     inputs@{ flake-parts, ... }:
     let
       inherit (inputs.nixpkgs) lib;
-      inherit (inputs) self;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
@@ -50,7 +49,6 @@
             }
           );
           drvArgs = {
-            srcDir = self;
             inherit nixComponents;
           };
         in

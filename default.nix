@@ -3,25 +3,21 @@
   lib,
   nixComponents,
   pkgs,
-  srcDir ? null,
 }:
 
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
   version = "2.30.0";
-  src =
-    if srcDir == null then
-      lib.fileset.toSource {
-        fileset = lib.fileset.unions [
-          ./meson.build
-          ./src/meson.build
-          (lib.fileset.fileFilter (file: file.hasExt "cc") ./src)
-          (lib.fileset.fileFilter (file: file.hasExt "hh") ./src)
-        ];
-        root = ./.;
-      }
-    else
-      srcDir;
+  src = lib.fileset.toSource {
+    fileset = lib.fileset.unions [
+      ./.clang-tidy
+      ./meson.build
+      ./src/meson.build
+      (lib.fileset.fileFilter (file: file.hasExt "cc") ./src)
+      (lib.fileset.fileFilter (file: file.hasExt "hh") ./src)
+    ];
+    root = ./.;
+  };
   buildInputs = with pkgs; [
     nlohmann_json
     curl
