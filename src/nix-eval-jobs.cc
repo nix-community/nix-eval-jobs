@@ -235,6 +235,18 @@ struct Thread {
         if (status != 0) {
             throw nix::SysError(status, "calling pthread_attr_init");
         }
+
+        struct AttrGuard {
+            pthread_attr_t &attr;
+            explicit AttrGuard(pthread_attr_t &attribute) : attr(attribute) {}
+            AttrGuard(const AttrGuard &) = delete;
+            auto operator=(const AttrGuard &) -> AttrGuard & = delete;
+            AttrGuard(AttrGuard &&) = delete;
+            auto operator=(AttrGuard &&) -> AttrGuard & = delete;
+            ~AttrGuard() { (void)pthread_attr_destroy(&attr); }
+        };
+        const AttrGuard attrGuard(attr);
+
         static constexpr size_t STACK_SIZE_MB = 64;
         static constexpr size_t KB_SIZE = 1024;
         status = pthread_attr_setstacksize(
@@ -246,10 +258,6 @@ struct Thread {
             pthread_create(&thread, &attr, Thread::init, funcPtr.release());
         if (status != 0) {
             throw nix::SysError(status, "calling pthread_launch");
-        }
-        status = pthread_attr_destroy(&attr);
-        if (status != 0) {
-            throw nix::SysError(status, "calling pthread_attr_destroy");
         }
     }
 
