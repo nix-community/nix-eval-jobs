@@ -1,24 +1,17 @@
 Checks: >
   - bugprone-*
-  - performance-*
-  - modernize-*
-  - readability-*
-  - misc-*
-  - portability-*
   - concurrency-*
+  - cppcoreguidelines-*
   - google-*
+  - misc-*
+  - modernize-*
+  - performance-*
+  - portability-*
+  - readability-*
   - -google-readability-todo
 
   # don't find them too problematic
-  - -readability-identifier-length
-  - -readability-magic-numbers
   - -bugprone-easily-swappable-parameters
-
-  # maybe address this in the future
-  - -readability-function-cognitive-complexity
-
-  - cppcoreguidelines-*
-  - -cppcoreguidelines-avoid-magic-numbers
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True
