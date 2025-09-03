@@ -5,7 +5,7 @@
 #include <memory>
 #include <cstdlib>
 
-[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int;
+[[nodiscard]] auto tryWriteLine(int file_descriptor, std::string str) -> int;
 
 struct FileDeleter {
     void operator()(FILE *file) const {
@@ -26,7 +26,7 @@ struct MemoryDeleter {
 class LineReader {
   public:
     LineReader(const LineReader &) = delete;
-    explicit LineReader(int fd);
+    explicit LineReader(int file_descriptor);
     auto operator=(const LineReader &) -> LineReader & = delete;
     auto operator=(LineReader &&) -> LineReader & = delete;
     ~LineReader() = default;

@@ -17,25 +17,28 @@
 #include "buffered-io.hh"
 #include "strings-portable.hh"
 
-[[nodiscard]] auto tryWriteLine(int fd, std::string s) -> int {
-    s += "\n";
-    std::string_view sv{s};
-    while (!sv.empty()) {
+[[nodiscard]] auto tryWriteLine(int file_descriptor, std::string str) -> int {
+    str += "\n";
+    std::string_view string_view{str};
+    while (!string_view.empty()) {
         nix::checkInterrupt();
-        const ssize_t res = write(fd, sv.data(), sv.size());
+        const ssize_t res =
+            write(file_descriptor, string_view.data(), string_view.size());
         if (res == -1 && errno != EINTR) {
             return -errno;
         }
         if (res > 0) {
-            sv.remove_prefix(res);
+            string_view.remove_prefix(res);
         }
     }
     return 0;
 }
 
-LineReader::LineReader(int fd) : stream(fdopen(fd, "r")) {
+LineReader::LineReader(int file_descriptor)
+    : stream(fdopen(file_descriptor, "r")) {
     if (stream == nullptr) {
-        throw nix::Error("fdopen(%d) failed: %s", fd, get_error_name(errno));
+        throw nix::Error("fdopen(%d) failed: %s", file_descriptor,
+                         get_error_name(errno));
     }
 }
 

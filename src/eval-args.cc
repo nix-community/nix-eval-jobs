@@ -16,6 +16,7 @@
 #include <string>
 
 #include "eval-args.hh"
+#include <optional>
 
 MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
     addFlag({
@@ -31,8 +32,9 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                 if (hiddenCategories.contains(flag->category)) {
                     continue;
                 }
-                std::cout << "  --" << std::left << std::setw(20) << name << " "
-                          << flag->description << "\n";
+                static constexpr int FLAG_WIDTH = 20;
+                std::cout << "  --" << std::left << std::setw(FLAG_WIDTH)
+                          << name << " " << flag->description << "\n";
             }
 
             ::exit(0); // NOLINT(concurrency-mt-unsafe)
@@ -84,7 +86,9 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .description = "number of evaluate workers",
         .category = "",
         .labels = {"workers"},
-        .handler = {[this](const std::string &s) { nrWorkers = std::stoi(s); }},
+        .handler = {[this](const std::string &str) {
+            nrWorkers = std::stoi(str);
+        }},
         .completer = nullptr,
         .experimentalFeature = std::nullopt,
     });
@@ -97,8 +101,8 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                        "(4GiB per worker by default)",
         .category = "",
         .labels = {"size"},
-        .handler = {[this](const std::string &s) {
-            maxMemorySize = std::stoi(s);
+        .handler = {[this](const std::string &str) {
+            maxMemorySize = std::stoi(str);
         }},
         .completer = nullptr,
         .experimentalFeature = std::nullopt,

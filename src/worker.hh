@@ -11,4 +11,5 @@ class EvalState;
 template <typename T> class ref;
 } // namespace nix
 
-void worker(MyArgs &args, nix::AutoCloseFD &to, nix::AutoCloseFD &from);
+void worker(MyArgs &args, nix::AutoCloseFD &toParent,
+            nix::AutoCloseFD &fromParent);

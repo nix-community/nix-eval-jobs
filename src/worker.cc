@@ -30,7 +30,6 @@
 #include <nix/util/logging.hh>
 #include <nix/store/outputs-spec.hh>
 #include <nix/util/ref.hh>
-#include <nix/store/store-open.hh>
 #include <nix/expr/symbol-table.hh>
 #include <nix/util/types.hh>
 #include <nix/util/util.hh>
@@ -39,7 +38,6 @@
 #include <nlohmann/json_fwd.hpp>
 #include <numeric>
 #include <optional>
-#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -63,9 +61,9 @@ auto releaseExprTopLevelValue(nix::EvalState &state, nix::Bindings &autoArgs,
     nix::Value vTop;
 
     if (args.fromArgs) {
-        nix::Expr *e =
+        nix::Expr *expr =
             state.parseExprFromString(args.releaseExpr, state.rootPath("."));
-        state.eval(e, vTop);
+        state.eval(expr, vTop);
     } else {
         state.evalFile(lookupFileArg(state, args.releaseExpr), vTop);
     }
@@ -77,7 +75,7 @@ auto releaseExprTopLevelValue(nix::EvalState &state, nix::Bindings &autoArgs,
     return vRoot;
 }
 
-auto evaluateFlake(nix::ref<nix::EvalState> state,
+auto evaluateFlake(const nix::ref<nix::EvalState> &state,
                    const std::string &releaseExpr,
                    const nix::flake::LockFlags &lockFlags) -> nix::Value * {
     auto [flakeRef, fragment, outputSpec] =
@@ -92,31 +90,30 @@ auto evaluateFlake(nix::ref<nix::EvalState> state,
     // If no fragment specified, use callFlake to get the full flake structure
     // (just like :lf in the REPL)
     if (fragment.empty()) {
-        auto v = state->allocValue();
-        nix::flake::callFlake(*state, *flake.getLockedFlake(), *v);
-        return v;
-    } else {
-        // Fragment specified, use normal evaluation
-        return flake.toValue(*state).first;
+        auto *value = state->allocValue();
+        nix::flake::callFlake(*state, *flake.getLockedFlake(), *value);
+        return value;
     }
+    // Fragment specified, use normal evaluation
+    return flake.toValue(*state).first;
 }
 
 auto attrPathJoin(nlohmann::json input) -> std::string {
     return std::accumulate(input.begin(), input.end(), std::string(),
-                           [](const std::string &ss, std::string s) {
+                           [](const std::string &acc, std::string str) {
                                // Escape token if containing dots
-                               if (s.find('.') != std::string::npos) {
-                                   s = "\"" + s + "\"";
+                               if (str.find('.') != std::string::npos) {
+                                   str = "\"" + str + "\"";
                                }
-                               return ss.empty() ? s : ss + "." + s;
+                               return acc.empty() ? str : acc + "." + str;
                            });
 }
 } // namespace
 
 void worker(
     MyArgs &args,
-    nix::AutoCloseFD &to, // NOLINT(bugprone-easily-swappable-parameters)
-    nix::AutoCloseFD &from) {
+    nix::AutoCloseFD &toParent, // NOLINT(bugprone-easily-swappable-parameters)
+    nix::AutoCloseFD &fromParent) {
 
     auto evalStore = nix_eval_jobs::openStore(args.evalStoreUrl);
     auto state = nix::make_ref<nix::EvalState>(
@@ -133,7 +130,7 @@ void worker(
         }
 
         // Apply the provided select function
-        auto selectExpr =
+        auto *selectExpr =
             state->parseExprFromString(args.selectExpr, state->rootPath("."));
 
         nix::Value vSelect;
@@ -148,24 +145,24 @@ void worker(
         return vSelected;
     }();
 
-    LineReader fromReader(from.release());
+    LineReader fromReader(fromParent.release());
 
     while (true) {
         /* Wait for the collector to send us a job name. */
-        if (tryWriteLine(to.get(), "next") < 0) {
+        if (tryWriteLine(toParent.get(), "next") < 0) {
             return; // main process died
         }
 
-        auto s = fromReader.readLine();
-        if (s == "exit") {
+        auto line = fromReader.readLine();
+        if (line == "exit") {
             break;
         }
-        if (!nix::hasPrefix(s, "do ")) {
-            std::cerr << "worker error: received invalid command '" << s
+        if (!nix::hasPrefix(line, "do ")) {
+            std::cerr << "worker error: received invalid command '" << line
                       << "'\n";
             abort();
         }
-        auto path = nlohmann::json::parse(s.substr(3));
+        auto path = nlohmann::json::parse(line.substr(3));
         auto attrPathS = attrPathJoin(path);
 
         /* Evaluate it and send info back to the collector. */
@@ -176,26 +173,28 @@ void worker(
                 nix::findAlongAttrPath(*state, attrPathS, autoArgs, *vRoot)
                     .first;
 
-            auto *v = state->allocValue();
-            state->autoCallFunction(autoArgs, *vTmp, *v);
+            auto *value = state->allocValue();
+            state->autoCallFunction(autoArgs, *vTmp, *value);
 
-            if (v->type() == nix::nAttrs) {
-                if (auto packageInfo = nix::getDerivation(*state, *v, false)) {
+            if (value->type() == nix::nAttrs) {
+                if (auto packageInfo =
+                        nix::getDerivation(*state, *value, false)) {
 
                     std::optional<Constituents> maybeConstituents;
                     if (args.constituents) {
                         std::vector<std::string> constituents;
                         std::vector<std::string> namedConstituents;
                         bool globConstituents = false;
-                        const auto *a = v->attrs()->get(
+                        const auto *aggregateAttr = value->attrs()->get(
                             state->symbols.create("_hydraAggregate"));
-                        if (a != nullptr &&
-                            state->forceBool(*a->value, a->pos,
+                        if (aggregateAttr != nullptr &&
+                            state->forceBool(*aggregateAttr->value,
+                                             aggregateAttr->pos,
                                              "while evaluating the "
                                              "`_hydraAggregate` attribute")) {
-                            const auto *a = v->attrs()->get(
+                            const auto *constituentsAttr = value->attrs()->get(
                                 state->symbols.create("constituents"));
-                            if (a == nullptr) {
+                            if (constituentsAttr == nullptr) {
                                 state
                                     ->error<nix::EvalError>(
                                         "derivation must have a ‘constituents’ "
@@ -205,39 +204,45 @@ void worker(
 
                             nix::NixStringContext context;
                             state->coerceToString(
-                                a->pos, *a->value, context,
+                                constituentsAttr->pos, *constituentsAttr->value,
+                                context,
                                 "while evaluating the `constituents` attribute",
                                 true, false);
-                            for (const auto &c : context) {
+                            for (const auto &ctx : context) {
                                 std::visit(
                                     nix::overloaded{
                                         [&](const nix::NixStringContextElem::
-                                                Built &b) {
+                                                Built &built) {
                                             constituents.push_back(
-                                                b.drvPath->to_string(
+                                                built.drvPath->to_string(
                                                     *state->store));
                                         },
                                         [&](const nix::NixStringContextElem::
-                                                Opaque &o [[maybe_unused]]) {},
+                                                Opaque &opaque
+                                            [[maybe_unused]]) {},
                                         [&](const nix::NixStringContextElem::
-                                                DrvDeep &d [[maybe_unused]]) {},
+                                                DrvDeep &drvDeep
+                                            [[maybe_unused]]) {},
                                     },
-                                    c.raw);
+                                    ctx.raw);
                             }
 
-                            state->forceList(*a->value, a->pos,
+                            state->forceList(*constituentsAttr->value,
+                                             constituentsAttr->pos,
                                              "while evaluating the "
                                              "`constituents` attribute");
-                            auto constituents = a->value->listView();
-                            for (const auto &v : constituents) {
-                                state->forceValue(*v, nix::noPos);
-                                if (v->type() == nix::nString) {
-                                    namedConstituents.emplace_back(v->c_str());
+                            auto constituents =
+                                constituentsAttr->value->listView();
+                            for (const auto &val : constituents) {
+                                state->forceValue(*val, nix::noPos);
+                                if (val->type() == nix::nString) {
+                                    namedConstituents.emplace_back(
+                                        val->c_str());
                                 }
                             }
 
                             const auto *glob =
-                                v->attrs()->get(state->symbols.create(
+                                value->attrs()->get(state->symbols.create(
                                     "_hydraGlobConstituents"));
                             globConstituents =
                                 glob != nullptr &&
@@ -250,8 +255,8 @@ void worker(
                             constituents, namedConstituents, globConstituents);
                     }
 
-                    if (args.applyExpr != "") {
-                        auto applyExpr = state->parseExprFromString(
+                    if (!args.applyExpr.empty()) {
+                        auto *applyExpr = state->parseExprFromString(
                             args.applyExpr, state->rootPath("."));
 
                         nix::Value vApply;
@@ -259,17 +264,18 @@ void worker(
 
                         state->eval(applyExpr, vApply);
 
-                        state->callFunction(vApply, *v, vRes, nix::noPos);
+                        state->callFunction(vApply, *value, vRes, nix::noPos);
                         state->forceAttrs(
                             vRes, nix::noPos,
                             "apply needs to evaluate to an attrset");
 
                         nix::NixStringContext context;
-                        std::stringstream ss;
+                        std::stringstream stream;
                         nix::printValueAsJSON(*state, true, vRes, nix::noPos,
-                                              ss, context);
+                                              stream, context);
 
-                        reply["extraValue"] = nlohmann::json::parse(ss.str());
+                        reply["extraValue"] =
+                            nlohmann::json::parse(stream.str());
                     }
 
                     auto drv = Drv(attrPathS, *state, *packageInfo, args,
@@ -303,15 +309,16 @@ void worker(
                         path.empty(); // Dont require `recurseForDerivations
                                       // = true;` for top-level attrset
 
-                    for (auto &i :
-                         v->attrs()->lexicographicOrder(state->symbols)) {
-                        const std::string_view &name = state->symbols[i->name];
+                    for (auto &attr :
+                         value->attrs()->lexicographicOrder(state->symbols)) {
+                        const std::string_view &name =
+                            state->symbols[attr->name];
                         attrs.push_back(name);
 
                         if (name == "recurseForDerivations" &&
                             !args.forceRecurse) {
-                            const auto *attrv =
-                                v->attrs()->get(state->sRecurseForDerivations);
+                            const auto *attrv = value->attrs()->get(
+                                state->sRecurseForDerivations);
                             recurse = state->forceBool(
                                 *attrv->value, attrv->pos,
                                 "while evaluating recurseForDerivations");
@@ -347,22 +354,24 @@ void worker(
             std::cerr << msg << '\n';
         }
 
-        if (tryWriteLine(to.get(), reply.dump()) < 0) {
+        if (tryWriteLine(toParent.get(), reply.dump()) < 0) {
             return; // main process died
         }
 
         /* If our RSS exceeds the maximum, exit. The collector will
            start a new process. */
-        struct rusage r = {}; // NOLINT(misc-include-cleaner)
-        getrusage(RUSAGE_SELF, &r);
+        struct rusage resourceUsage = {}; // NOLINT(misc-include-cleaner)
+        getrusage(RUSAGE_SELF, &resourceUsage);
         const size_t maxrss =
-            r.ru_maxrss; // NOLINT(cppcoreguidelines-pro-type-union-access)
-        if (maxrss > args.maxMemorySize * 1024) {
+            resourceUsage
+                .ru_maxrss; // NOLINT(cppcoreguidelines-pro-type-union-access)
+        static constexpr size_t KB_TO_BYTES = 1024;
+        if (maxrss > args.maxMemorySize * KB_TO_BYTES) {
             break;
         }
     }
 
-    if (tryWriteLine(to.get(), "restart") < 0) {
+    if (tryWriteLine(toParent.get(), "restart") < 0) {
         return; // main process died
     };
 }
