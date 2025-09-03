@@ -37,7 +37,7 @@ stdenv.mkDerivation {
       # nlohmann_json can be only discovered via cmake files
       cmake
     ]
-    ++ (lib.optional stdenv.cc.isClang [ pkgs.clang-tools ]);
+    ++ lib.optional stdenv.cc.isClang (lib.hiPrio pkgs.llvmPackages_latest.clang-tools);
 
   passthru = {
     inherit nixComponents;
