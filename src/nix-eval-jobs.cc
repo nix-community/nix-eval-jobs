@@ -38,6 +38,7 @@
 #include <nix/util/sync.hh>
 #include <nix/util/terminal.hh>
 #include <nix/util/util.hh>
+#include <sys/signal.h>
 #include <variant>
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/json.hpp>
@@ -281,6 +282,7 @@ struct State {
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
+    // NOLINTNEXTLINE(misc-include-cleaner)
     const pid_t pid = proc.pid.release();
     while (true) {
         int status = 0;

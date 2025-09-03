@@ -22,6 +22,7 @@
     std::string_view string_view{str};
     while (!string_view.empty()) {
         nix::checkInterrupt();
+        // NOLINTNEXTLINE(misc-include-cleaner)
         const ssize_t res =
             write(file_descriptor, string_view.data(), string_view.size());
         if (res == -1 && errno != EINTR) {

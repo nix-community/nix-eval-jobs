@@ -1,4 +1,4 @@
-#include <cstdio>
+
 #include <cstdlib>
 #include <nix/util/args.hh>
 #include <nix/util/file-system.hh>
