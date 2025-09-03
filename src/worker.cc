@@ -6,6 +6,7 @@
 #include <nix/util/terminal.hh>
 #include <nix/expr/attr-path.hh>
 #include <nix/store/local-fs-store.hh>
+#include <nix/store/globals.hh>
 #include <nix/cmd/installable-flake.hh>
 #include <nix/expr/value-to-json.hh>
 #include <sys/resource.h>
