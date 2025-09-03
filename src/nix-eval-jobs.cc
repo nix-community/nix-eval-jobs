@@ -343,9 +343,9 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     }
 }
 
-auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
+auto joinAttrPath(const nlohmann::json &attrPath) -> std::string {
     std::string joined;
-    for (auto &element : attrPath) {
+    for (const auto &element : attrPath) {
         if (!joined.empty()) {
             joined += '.';
         }
@@ -402,8 +402,8 @@ auto processWorkerResponse(LineReader *fromReader,
     // Read response from worker
     auto respString = fromReader->readLine();
     if (respString.empty()) {
-        auto msg = "reading result for attrPath '" +
-                   joinAttrPath(const_cast<nlohmann::json &>(attrPath)) + "'";
+        auto msg =
+            "reading result for attrPath '" + joinAttrPath(attrPath) + "'";
         handleBrokenWorkerPipe(*proc, msg);
     }
 
@@ -479,7 +479,7 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
             if (!maybeAttrPath.has_value()) {
                 return;
             }
-            auto attrPath = maybeAttrPath.value();
+            const auto &attrPath = maybeAttrPath.value();
 
             if (tryWriteLine(proc_.value()->to.get(), "do " + attrPath.dump()) <
                 0) {
