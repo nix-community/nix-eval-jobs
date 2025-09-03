@@ -7,8 +7,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-import pytest
-
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
 # Allow overriding the binary path with environment variable
@@ -493,7 +491,6 @@ def test_select_flake() -> None:
         assert '"dotted.attr"' in attrs
 
 
-@pytest.mark.infiniterecursion
 def test_recursion_error() -> None:
     with TemporaryDirectory() as tempdir:
         cmd = [

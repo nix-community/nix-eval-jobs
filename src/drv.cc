@@ -15,10 +15,10 @@
 #include <nix/util/error.hh>
 #include <nix/expr/eval-error.hh>
 #include <nix/util/experimental-features.hh>
+#include <nix/util/configuration.hh> // for experimentalFeatureSettings
 // required for std::optional
 #include <nix/util/json-utils.hh> //NOLINT(misc-include-cleaner)
 #include <nix/util/pos-idx.hh>
-#include <cstdint>
 #include <exception>
 #include <map>
 #include <optional>
@@ -31,7 +31,6 @@
 
 #include "drv.hh"
 #include "eval-args.hh"
-#include "store.hh"
 
 namespace {
 
@@ -79,7 +78,7 @@ auto queryMeta(nix::PackageInfo &packageInfo, nix::EvalState &state)
     nlohmann::json meta_;
     for (const auto &metaName : packageInfo.queryMetaNames()) {
         nix::NixStringContext context;
-        std::stringstream ss;
+        std::stringstream stream;
 
         auto *metaValue = packageInfo.queryMeta(metaName);
         // Skip non-serialisable types
@@ -87,9 +86,10 @@ auto queryMeta(nix::PackageInfo &packageInfo, nix::EvalState &state)
             continue;
         }
 
-        nix::printValueAsJSON(state, true, *metaValue, nix::noPos, ss, context);
+        nix::printValueAsJSON(state, true, *metaValue, nix::noPos, stream,
+                              context);
 
-        meta_[metaName] = nlohmann::json::parse(ss.str());
+        meta_[metaName] = nlohmann::json::parse(stream.str());
     }
     return meta_;
 }
@@ -135,16 +135,16 @@ auto queryCacheStatus(
         // TODO: can we expose the topological sort order as a graph?
         auto sorted = store.topoSortPaths(missing.willBuild);
         std::ranges::reverse(sorted.begin(), sorted.end());
-        for (auto &i : sorted) {
-            neededBuilds.push_back(store.printStorePath(i));
+        for (auto &path : sorted) {
+            neededBuilds.push_back(store.printStorePath(path));
         }
     }
     if (!missing.willSubstitute.empty()) {
         std::vector<const nix::StorePath *> willSubstituteSorted = {};
         std::ranges::for_each(missing.willSubstitute.begin(),
                               missing.willSubstitute.end(),
-                              [&](const nix::StorePath &p) {
-                                  willSubstituteSorted.push_back(&p);
+                              [&](const nix::StorePath &path) {
+                                  willSubstituteSorted.push_back(&path);
                               });
         std::ranges::sort(
             willSubstituteSorted.begin(), willSubstituteSorted.end(),
@@ -154,14 +154,14 @@ auto queryCacheStatus(
                 }
                 return lhs->name() < rhs->name();
             });
-        for (const auto *p : willSubstituteSorted) {
-            neededSubstitutes.push_back(store.printStorePath(*p));
+        for (const auto *path : willSubstituteSorted) {
+            neededSubstitutes.push_back(store.printStorePath(*path));
         }
     }
 
     if (!missing.unknown.empty()) {
-        for (const auto &i : missing.unknown) {
-            unknownPaths.push_back(store.printStorePath(i));
+        for (const auto &path : missing.unknown) {
+            unknownPaths.push_back(store.printStorePath(path));
         }
     }
 
@@ -199,7 +199,7 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
     // Check if we can read derivations (requires LocalFSStore and not in
     // read-only mode)
     auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
-    bool canReadDerivation = localStore && !nix::settings.readOnlyMode;
+    const bool canReadDerivation = localStore && !nix::settings.readOnlyMode;
 
     if (canReadDerivation) {
         // We can read the derivation directly for precise information

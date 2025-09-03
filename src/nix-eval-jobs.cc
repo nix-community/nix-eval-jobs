@@ -14,32 +14,29 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <nix/cmd/common-eval-args.hh>
 #include <nix/util/configuration.hh>
-#include <nix/store/derivations.hh>
 #include <nix/util/error.hh>
 #include <nix/expr/eval-gc.hh>
 #include <nix/expr/eval-settings.hh>
-#include <nix/expr/eval.hh>
+#include <nix/expr/eval.hh> // NOLINT(misc-header-include-cycle)
 #include <nix/util/file-descriptor.hh>
-#include <nix/util/file-system.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/settings.hh>
 #include <nix/util/fmt.hh>
 #include <nix/store/globals.hh>
 #include <nix/store/local-fs-store.hh>
 #include <nix/util/logging.hh>
-#include <nix/store/path.hh>
 #include <nix/util/processes.hh>
 #include <nix/main/shared.hh>
-#include <nix/util/signals.hh>
-#include <nix/store/store-open.hh>
-#include <nix/util/strings.hh>
+#include <nix/util/signals.hh> // NOLINT(misc-header-include-cycle)
 #include <nix/util/sync.hh>
 #include <nix/util/terminal.hh>
+#include <nix/util/util.hh>
+#include <sys/signal.h>
+#include <variant>
 #include <nlohmann/detail/iterators/iter_impl.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -58,14 +55,15 @@
 #include "buffered-io.hh"
 #include "worker.hh"
 #include "strings-portable.hh"
+#include "output-stream-lock.hh"
 #include "constituents.hh"
 #include "store.hh"
 
 namespace {
 MyArgs myArgs; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &to,
-                                     nix::AutoCloseFD &from)>;
+using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &toFd,
+                                     nix::AutoCloseFD &fromFd)>;
 
 void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
                         const MyArgs &args) {
@@ -92,63 +90,27 @@ void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
                        rewriteAggregates(jobs, namedConstituents, localStoreRef,
                                          args.gcRootsDir);
                    },
-                   [&](const DependencyCycle &e) {
+                   [&](const DependencyCycle &cycle) {
                        nix::logger->log(nix::lvlError,
                                         nix::fmt("Found dependency cycle "
                                                  "between jobs '%s' and '%s'",
-                                                 e.a, e.b));
-                       jobs[e.a]["error"] = e.message();
-                       jobs[e.b]["error"] = e.message();
+                                                 cycle.a, cycle.b));
+                       jobs[cycle.a]["error"] = cycle.message();
+                       jobs[cycle.b]["error"] = cycle.message();
 
-                       std::cout << jobs[e.a].dump() << "\n"
-                                 << jobs[e.b].dump() << "\n";
+                       getCoutLock().lock() << jobs[cycle.a].dump() << "\n"
+                                            << jobs[cycle.b].dump() << "\n";
 
-                       for (const auto &jobName : e.remainingAggregates) {
+                       for (const auto &jobName : cycle.remainingAggregates) {
                            jobs[jobName]["error"] =
                                "Skipping aggregate because of a dependency "
                                "cycle";
-                           std::cout << jobs[jobName].dump() << "\n";
+                           getCoutLock().lock() << jobs[jobName].dump() << "\n";
                        }
                    },
                },
                resolveNamedConstituents(jobs));
 }
-
-struct OutputStreamLock {
-  private:
-    std::mutex mutex;
-    std::ostream &stream;
-
-    struct LockedOutputStream {
-      public:
-        std::unique_lock<std::mutex> lock;
-        std::ostream &stream;
-
-      public:
-        LockedOutputStream(std::mutex &mutex, std::ostream &stream)
-            : lock(mutex), stream(stream) {}
-        LockedOutputStream(LockedOutputStream &&other)
-            : lock(std::move(other.lock)), stream(other.stream) {}
-
-        template <class T> LockedOutputStream operator<<(const T &s) && {
-            stream << s;
-            return std::move(*this);
-        }
-
-        ~LockedOutputStream() {
-            if (lock) {
-                stream << std::flush;
-            }
-        }
-    };
-
-  public:
-    OutputStreamLock(std::ostream &stream) : stream(stream) {}
-
-    LockedOutputStream lock() { return {mutex, stream}; }
-};
-
-OutputStreamLock coutLock(std::cout);
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
@@ -165,28 +127,28 @@ struct Proc {
         nix::Pipe fromPipe;
         toPipe.create();
         fromPipe.create();
-        auto p = startProcess(
+        auto childPid = startProcess(
             [&,
-             to{std::make_shared<nix::AutoCloseFD>(
+             toFd{std::make_shared<nix::AutoCloseFD>(
                  std::move(fromPipe.writeSide))},
-             from{std::make_shared<nix::AutoCloseFD>(
+             fromFd{std::make_shared<nix::AutoCloseFD>(
                  std::move(toPipe.readSide))}]() {
                 nix::logger->log(
                     nix::lvlDebug,
                     nix::fmt("created worker process %d", getpid()));
                 try {
-                    proc(myArgs, *to, *from);
+                    proc(myArgs, *toFd, *fromFd);
                 } catch (nix::Error &e) {
                     nlohmann::json err;
                     const auto &msg = e.msg();
                     err["error"] = nix::filterANSIEscapes(msg, true);
                     nix::logger->log(nix::lvlError, msg);
-                    if (tryWriteLine(to->get(), err.dump()) < 0) {
+                    if (tryWriteLine(toFd->get(), err.dump()) < 0) {
                         return; // main process died
                     };
                     // Don't forget to print it into the STDERR log, this is
                     // what's shown in the Hydra UI.
-                    if (tryWriteLine(to->get(), "restart") < 0) {
+                    if (tryWriteLine(toFd->get(), "restart") < 0) {
                         return; // main process died
                     }
                 }
@@ -195,7 +157,7 @@ struct Proc {
 
         to = std::move(toPipe.writeSide);
         from = std::move(fromPipe.readSide);
-        pid = p;
+        pid = childPid;
     }
 
     ~Proc() = default;
@@ -207,8 +169,10 @@ struct Proc {
 // doesn't propagate to the threads we launch here. It turns out, running the
 // evaluator under an anemic stack of 0.5MiB has it overflow way too quickly.
 // Hence, we have our own custom Thread struct.
+// NOLINTBEGIN(misc-include-cleaner)
+// False positive: pthread.h is included but clang-tidy doesn't recognize it
 struct Thread {
-    pthread_t thread = {}; // NOLINT(misc-include-cleaner)
+    pthread_t thread = {};
 
     Thread(const Thread &) = delete;
     Thread(Thread &&) noexcept = default;
@@ -216,34 +180,47 @@ struct Thread {
     auto operator=(const Thread &) -> Thread & = delete;
     auto operator=(Thread &&) -> Thread & = delete;
 
-    explicit Thread(std::function<void(void)> f) {
-        pthread_attr_t attr = {}; // NOLINT(misc-include-cleaner)
+    explicit Thread(std::function<void(void)> func) {
+        pthread_attr_t attr = {};
 
-        auto func = std::make_unique<std::function<void(void)>>(std::move(f));
+        auto funcPtr =
+            std::make_unique<std::function<void(void)>>(std::move(func));
 
-        int s = pthread_attr_init(&attr);
-        if (s != 0) {
-            throw nix::SysError(s, "calling pthread_attr_init");
+        int status = pthread_attr_init(&attr);
+        if (status != 0) {
+            throw nix::SysError(status, "calling pthread_attr_init");
         }
-        s = pthread_attr_setstacksize(&attr,
-                                      static_cast<size_t>(64) * 1024 * 1024);
-        if (s != 0) {
-            throw nix::SysError(s, "calling pthread_attr_setstacksize");
+
+        struct AttrGuard {
+            pthread_attr_t &attr;
+            explicit AttrGuard(pthread_attr_t &attribute) : attr(attribute) {}
+            AttrGuard(const AttrGuard &) = delete;
+            auto operator=(const AttrGuard &) -> AttrGuard & = delete;
+            AttrGuard(AttrGuard &&) = delete;
+            auto operator=(AttrGuard &&) -> AttrGuard & = delete;
+            ~AttrGuard() { (void)pthread_attr_destroy(&attr); }
+        };
+        const AttrGuard attrGuard(attr);
+
+        static constexpr size_t STACK_SIZE_MB = 64;
+        static constexpr size_t KB_SIZE = 1024;
+        status = pthread_attr_setstacksize(
+            &attr, static_cast<size_t>(STACK_SIZE_MB) * KB_SIZE * KB_SIZE);
+        if (status != 0) {
+            throw nix::SysError(status, "calling pthread_attr_setstacksize");
         }
-        s = pthread_create(&thread, &attr, Thread::init, func.release());
-        if (s != 0) {
-            throw nix::SysError(s, "calling pthread_launch");
+        status = pthread_create(&thread, &attr, Thread::init, funcPtr.get());
+        if (status != 0) {
+            throw nix::SysError(status, "calling pthread_launch");
         }
-        s = pthread_attr_destroy(&attr);
-        if (s != 0) {
-            throw nix::SysError(s, "calling pthread_attr_destroy");
-        }
+        [[maybe_unused]] auto *res =
+            funcPtr.release(); // will be deleted in init()
     }
 
     void join() const {
-        const int s = pthread_join(thread, nullptr);
-        if (s != 0) {
-            throw nix::SysError(s, "calling pthread_join");
+        const int status = pthread_join(thread, nullptr);
+        if (status != 0) {
+            throw nix::SysError(status, "calling pthread_join");
         }
     }
 
@@ -256,6 +233,7 @@ struct Thread {
         return nullptr;
     }
 };
+// NOLINTEND(misc-include-cleaner)
 
 struct State {
     std::set<nlohmann::json> todo =
@@ -268,11 +246,12 @@ struct State {
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     // we already took the process status from Proc, no
     // need to wait for it again to avoid error messages
+    // NOLINTNEXTLINE(misc-include-cleaner)
     const pid_t pid = proc.pid.release();
     while (true) {
         int status = 0;
-        const int rc = waitpid(pid, &status, WNOHANG);
-        if (rc == 0) {
+        const int result = waitpid(pid, &status, WNOHANG);
+        if (result == 0) {
             kill(pid, SIGKILL);
             throw nix::Error(
                 "BUG: while %s, worker pipe got closed but evaluation "
@@ -280,7 +259,7 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
                 msg);
         }
 
-        if (rc == -1) {
+        if (result == -1) {
             kill(pid, SIGKILL);
             throw nix::Error(
                 "BUG: while %s, waitpid for evaluation worker failed: %s", msg,
@@ -330,9 +309,9 @@ void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {
     }
 }
 
-auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
+auto joinAttrPath(const nlohmann::json &attrPath) -> std::string {
     std::string joined;
-    for (auto &element : attrPath) {
+    for (const auto &element : attrPath) {
         if (!joined.empty()) {
             joined += '.';
         }
@@ -341,12 +320,109 @@ auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
     return joined;
 }
 
+namespace {
+auto checkWorkerStatus(LineReader *fromReader, Proc *proc) -> std::string_view {
+    auto line = fromReader->readLine();
+    if (line.empty()) {
+        handleBrokenWorkerPipe(*proc, "checking worker process");
+    }
+    if (line != "next" && line != "restart") {
+        try {
+            auto json = nlohmann::json::parse(line);
+            throw nix::Error("worker error: %s", std::string(json["error"]));
+        } catch (const nlohmann::json::exception &e) {
+            throw nix::Error(
+                "Received invalid JSON from worker: %s\n json: '%s'", e.what(),
+                line);
+        }
+    }
+    return line;
+}
+
+auto getNextJob(nix::Sync<State> &state_, std::condition_variable &wakeup,
+                Proc *proc) -> std::optional<nlohmann::json> {
+    nlohmann::json attrPath;
+    while (true) {
+        nix::checkInterrupt();
+        auto state(state_.lock());
+        if ((state->todo.empty() && state->active.empty()) || state->exc) {
+            if (tryWriteLine(proc->to.get(), "exit") < 0) {
+                handleBrokenWorkerPipe(*proc, "sending exit");
+            }
+            return std::nullopt;
+        }
+        if (!state->todo.empty()) {
+            attrPath = *state->todo.begin();
+            state->todo.erase(state->todo.begin());
+            state->active.insert(attrPath);
+            return attrPath;
+        }
+        state.wait(wakeup);
+    }
+}
+
+auto processWorkerResponse(LineReader *fromReader,
+                           const nlohmann::json &attrPath, Proc *proc,
+                           nix::Sync<State> &state_)
+    -> std::vector<nlohmann::json> {
+    // Read response from worker
+    auto respString = fromReader->readLine();
+    if (respString.empty()) {
+        auto msg =
+            "reading result for attrPath '" + joinAttrPath(attrPath) + "'";
+        handleBrokenWorkerPipe(*proc, msg);
+    }
+
+    // Parse JSON response
+    nlohmann::json response;
+    try {
+        response = nlohmann::json::parse(respString);
+    } catch (const nlohmann::json::exception &e) {
+        throw nix::Error("Received invalid JSON from worker: %s\n json: '%s'",
+                         e.what(), respString);
+    }
+
+    // Process the response
+    std::vector<nlohmann::json> newAttrs;
+    if (response.find("attrs") != response.end()) {
+        for (const auto &attr : response["attrs"]) {
+            nlohmann::json newAttr = nlohmann::json(response["attrPath"]);
+            newAttr.emplace_back(attr);
+            newAttrs.push_back(newAttr);
+        }
+    } else {
+        {
+            auto state(state_.lock());
+            state->jobs.insert_or_assign(response["attr"], response);
+        }
+        auto named = response.find("namedConstituents");
+        if (named == response.end() || named->empty()) {
+            getCoutLock().lock() << respString << "\n";
+        }
+    }
+
+    return newAttrs;
+}
+
+void updateJobQueue(nix::Sync<State> &state_, std::condition_variable &wakeup,
+                    const nlohmann::json &attrPath,
+                    const std::vector<nlohmann::json> &newAttrs) {
+    auto state(state_.lock());
+    state->active.erase(attrPath);
+    for (const auto &newAttr : newAttrs) {
+        state->todo.insert(newAttr);
+    }
+    wakeup.notify_all();
+}
+} // namespace
+
 void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
     try {
         std::optional<std::unique_ptr<Proc>> proc_;
         std::optional<std::unique_ptr<LineReader>> fromReader_;
 
         while (true) {
+            // Initialize worker if needed
             if (!proc_.has_value()) {
                 proc_ = std::make_unique<Proc>(worker);
             }
@@ -354,105 +430,34 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
                 fromReader_ =
                     std::make_unique<LineReader>(proc_.value()->from.release());
             }
-            auto proc = std::move(proc_.value());
-            auto fromReader = std::move(fromReader_.value());
 
-            /* Check whether the existing worker process is still there. */
-            auto s = fromReader->readLine();
-            if (s.empty()) {
-                handleBrokenWorkerPipe(*proc.get(), "checking worker process");
-            } else if (s == "restart") {
+            auto line = checkWorkerStatus(fromReader_.value().get(),
+                                          proc_.value().get());
+            if (line == "restart") {
+                // Reset worker
                 proc_ = std::nullopt;
                 fromReader_ = std::nullopt;
                 continue;
-            } else if (s != "next") {
-                try {
-                    auto json = nlohmann::json::parse(s);
-                    throw nix::Error("worker error: %s",
-                                     std::string(json["error"]));
-                } catch (const nlohmann::json::exception &e) {
-                    throw nix::Error(
-                        "Received invalid JSON from worker: %s\n json: '%s'",
-                        e.what(), s);
-                }
             }
 
-            /* Wait for a job name to become available. */
-            nlohmann::json attrPath;
-
-            while (true) {
-                nix::checkInterrupt();
-                auto state(state_.lock());
-                if ((state->todo.empty() && state->active.empty()) ||
-                    state->exc) {
-                    if (tryWriteLine(proc->to.get(), "exit") < 0) {
-                        handleBrokenWorkerPipe(*proc.get(), "sending exit");
-                    }
-                    return;
-                }
-                if (!state->todo.empty()) {
-                    attrPath = *state->todo.begin();
-                    state->todo.erase(state->todo.begin());
-                    state->active.insert(attrPath);
-                    break;
-                }
-                state.wait(wakeup);
+            auto maybeAttrPath =
+                getNextJob(state_, wakeup, proc_.value().get());
+            if (!maybeAttrPath.has_value()) {
+                return;
             }
+            const auto &attrPath = maybeAttrPath.value();
 
-            /* Tell the worker to evaluate it. */
-            if (tryWriteLine(proc->to.get(), "do " + attrPath.dump()) < 0) {
+            if (tryWriteLine(proc_.value()->to.get(), "do " + attrPath.dump()) <
+                0) {
                 auto msg = "sending attrPath '" + joinAttrPath(attrPath) + "'";
-                handleBrokenWorkerPipe(*proc.get(), msg);
+                handleBrokenWorkerPipe(*proc_.value(), msg);
             }
 
-            /* Wait for the response. */
-            auto respString = fromReader->readLine();
-            if (respString.empty()) {
-                auto msg = "reading result for attrPath '" +
-                           joinAttrPath(attrPath) + "'";
-                handleBrokenWorkerPipe(*proc.get(), msg);
-            }
-            nlohmann::json response;
-            try {
-                response = nlohmann::json::parse(respString);
-            } catch (const nlohmann::json::exception &e) {
-                throw nix::Error(
-                    "Received invalid JSON from worker: %s\n json: '%s'",
-                    e.what(), respString);
-            }
+            auto newAttrs =
+                processWorkerResponse(fromReader_.value().get(), attrPath,
+                                      proc_.value().get(), state_);
 
-            /* Handle the response. */
-            std::vector<nlohmann::json> newAttrs;
-            if (response.find("attrs") != response.end()) {
-                for (auto &i : response["attrs"]) {
-                    nlohmann::json newAttr =
-                        nlohmann::json(response["attrPath"]);
-                    newAttr.emplace_back(i);
-                    newAttrs.push_back(newAttr);
-                }
-            } else {
-                {
-                    auto state(state_.lock());
-                    state->jobs.insert_or_assign(response["attr"], response);
-                }
-                auto named = response.find("namedConstituents");
-                if (named == response.end() || named->empty()) {
-                    coutLock.lock() << respString << "\n";
-                }
-            }
-
-            proc_ = std::move(proc);
-            fromReader_ = std::move(fromReader);
-
-            /* Add newly discovered job names to the queue. */
-            {
-                auto state(state_.lock());
-                state->active.erase(attrPath);
-                for (auto &p : newAttrs) {
-                    state->todo.insert(p);
-                }
-                wakeup.notify_all();
-            }
+            updateJobQueue(state_, wakeup, attrPath, newAttrs);
         }
     } catch (...) {
         auto state(state_.lock());
@@ -485,8 +490,6 @@ auto main(int argc, char **argv) -> int {
         nix::initNix();
         nix::initGC();
         nix::flakeSettings.configureEvalSettings(nix::evalSettings);
-
-        std::optional<nix::AutoDelete> gcRootsDir = std::nullopt;
 
         myArgs.parseArgs(argv, argc);
 

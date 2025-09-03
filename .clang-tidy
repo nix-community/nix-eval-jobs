@@ -1,7 +1,16 @@
-Checks: >
-  - '*' # Enable all checks
-  # Disabled checks
+Checks:
+  - bugprone-*
+  - concurrency-*
+  - cppcoreguidelines-*
+  - google-*
+  - misc-*
+  - modernize-*
+  - performance-*
+  - portability-*
+  - readability-*
   - -google-readability-todo
+
+  # don't find them too problematic
   - -bugprone-easily-swappable-parameters
 UseColor: true
 CheckOptions:

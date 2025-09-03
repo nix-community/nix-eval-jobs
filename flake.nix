@@ -119,6 +119,8 @@
                 git add .
                 git commit -m init --quiet
                 popd
+                echo "Verifying clang-tidy configuration..."
+                clang-tidy --verify-config
                 ninja clang-tidy-fix
                 git status
                 if ! git --no-pager diff --exit-code; then

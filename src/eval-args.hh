@@ -12,6 +12,8 @@ class MyArgs : virtual public nix::MixEvalArgs,
                virtual public nix::MixCommonArgs,
                virtual public nix::RootArgs {
   public:
+    static constexpr size_t DEFAULT_MAX_MEMORY_SIZE = 4096;
+
     virtual ~MyArgs() = default;
     std::string releaseExpr;
     std::string applyExpr;
@@ -28,7 +30,7 @@ class MyArgs : virtual public nix::MixEvalArgs,
     bool constituents = false;
     bool noInstantiate = false;
     size_t nrWorkers = 1;
-    size_t maxMemorySize = 4096;
+    size_t maxMemorySize = DEFAULT_MAX_MEMORY_SIZE;
 
     // usually in MixFlakeOptions
     nix::flake::LockFlags lockFlags = {.updateLockFile = false,

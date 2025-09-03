@@ -5,7 +5,8 @@ src = [
   'buffered-io.cc',
   'constituents.cc',
   'worker.cc',
-  'strings-portable.cc'
+  'strings-portable.cc',
+  'output-stream-lock.cc'
 ]
 
 executable(
