@@ -535,8 +535,6 @@ auto main(int argc, char **argv) -> int {
         nix::initGC();
         nix::flakeSettings.configureEvalSettings(nix::evalSettings);
 
-        const std::optional<nix::AutoDelete> gcRootsDir = std::nullopt;
-
         myArgs.parseArgs(argv, argc);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
