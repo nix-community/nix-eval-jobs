@@ -10,11 +10,13 @@
 #include <functional>
 #include <variant>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <nix/store/derivations.hh>
 #include <nix/store/local-fs-store.hh>
 #include <nix/util/ref.hh>
 #include <nix/store/path.hh>
 #include <nix/util/logging.hh>
+#include <nix/util/error.hh>
 #include <nix/util/fmt.hh>
 #include <nix/util/file-system.hh>
 #include <nix/util/types.hh>
@@ -105,6 +107,74 @@ auto insertMatchingConstituents(
 }
 } // namespace
 
+namespace {
+void addConstituents(nlohmann::json &job, nix::Derivation &drv,
+                     const std::set<std::string> &dependencies,
+                     const std::map<std::string, nlohmann::json> &jobs,
+                     const nix::ref<nix::LocalFSStore> &store) {
+    for (const auto &childJobName : dependencies) {
+        auto childDrvPath = store->parseStorePath(
+            std::string(jobs.find(childJobName)->second["drvPath"]));
+        auto childDrv = store->readDerivation(childDrvPath);
+        job["constituents"].push_back(store->printStorePath(childDrvPath));
+        drv.inputDrvs.map[childDrvPath].value = {
+            childDrv.outputs.begin()->first};
+    }
+}
+
+auto rewriteDerivation(nlohmann::json &job, nix::Derivation &drv,
+                       const nix::StorePath &drvPath,
+                       const nix::ref<nix::LocalFSStore> &store,
+                       const nix::Path &gcRootsDir) -> bool {
+    std::string drvName(drvPath.name());
+    assert(nix::hasSuffix(drvName, nix::drvExtension));
+    drvName.resize(drvName.size() - nix::drvExtension.size());
+
+    auto hashModulo = hashDerivationModulo(*store, drv, true);
+    if (hashModulo.kind != nix::DrvHash::Kind::Regular) {
+        return false;
+    }
+    auto hashIter = hashModulo.hashes.find("out");
+    if (hashIter == hashModulo.hashes.end()) {
+        return false;
+    }
+    auto outPath = store->makeOutputPath("out", hashIter->second, drvName);
+    drv.env["out"] = store->printStorePath(outPath);
+    drv.outputs.insert_or_assign(
+        "out", nix::DerivationOutput::InputAddressed{.path = outPath});
+
+    auto newDrvPath = nix::writeDerivation(*store, drv);
+    auto newDrvPathS = store->printStorePath(newDrvPath);
+
+    if (!gcRootsDir.empty()) {
+        const nix::Path root =
+            gcRootsDir + "/" + std::string(nix::baseNameOf(newDrvPathS));
+
+        if (!nix::pathExists(root)) {
+            store->addPermRoot(newDrvPath, root);
+        }
+    }
+
+    nix::logger->log(nix::lvlDebug,
+                     nix::fmt("rewrote aggregate derivation %s -> %s",
+                              store->printStorePath(drvPath), newDrvPathS));
+
+    job["drvPath"] = newDrvPathS;
+    job["outputs"]["out"] = store->printStorePath(outPath);
+    return true;
+}
+
+void addBrokenJobsError(
+    nlohmann::json &job,
+    const std::unordered_map<std::string, std::string> &brokenJobs) {
+    std::stringstream errorStream;
+    for (const auto &[jobName, error] : brokenJobs) {
+        errorStream << jobName << ": " << error << "\n";
+    }
+    job["error"] = errorStream.str();
+}
+} // namespace
+
 auto resolveNamedConstituents(const std::map<std::string, nlohmann::json> &jobs)
     -> std::variant<std::vector<AggregateJob>, DependencyCycle> {
     std::set<AggregateJob> aggregateJobs;
@@ -177,66 +247,14 @@ void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
         auto drv = store->readDerivation(drvPath);
 
         if (aggregateJob.brokenJobs.empty()) {
-            for (const auto &childJobName : aggregateJob.dependencies) {
-                auto childDrvPath = store->parseStorePath(
-                    std::string(jobs.find(childJobName)->second["drvPath"]));
-                auto childDrv = store->readDerivation(childDrvPath);
-                job["constituents"].push_back(
-                    store->printStorePath(childDrvPath));
-                drv.inputDrvs.map[childDrvPath].value = {
-                    childDrv.outputs.begin()->first};
-            }
-
-            std::string drvName(drvPath.name());
-            assert(nix::hasSuffix(drvName, nix::drvExtension));
-            drvName.resize(drvName.size() - nix::drvExtension.size());
-
-            auto hashModulo = hashDerivationModulo(*store, drv, true);
-            if (hashModulo.kind != nix::DrvHash::Kind::Regular) {
-                continue;
-            }
-            auto hashIter = hashModulo.hashes.find("out");
-            if (hashIter == hashModulo.hashes.end()) {
-                continue;
-            }
-            auto outPath = store->makeOutputPath("out", hashIter->second, drvName);
-            drv.env["out"] = store->printStorePath(outPath);
-            drv.outputs.insert_or_assign(
-                "out", nix::DerivationOutput::InputAddressed{.path = outPath});
-
-            auto newDrvPath = nix::writeDerivation(*store, drv);
-            auto newDrvPathS = store->printStorePath(newDrvPath);
-
-            /* Register the derivation as a GC root.  !!! This
-                registers roots for jobs that we may have already
-                done. */
-            if (!gcRootsDir.empty()) {
-                const nix::Path root =
-                    gcRootsDir + "/" +
-                    std::string(nix::baseNameOf(newDrvPathS));
-
-                if (!nix::pathExists(root)) {
-                    store->addPermRoot(newDrvPath, root);
-                }
-            }
-
-            nix::logger->log(nix::lvlDebug,
-                             nix::fmt("rewrote aggregate derivation %s -> %s",
-                                      store->printStorePath(drvPath),
-                                      newDrvPathS));
-
-            job["drvPath"] = newDrvPathS;
-            job["outputs"]["out"] = store->printStorePath(outPath);
+            addConstituents(job, drv, aggregateJob.dependencies, jobs, store);
+            rewriteDerivation(job, drv, drvPath, store, gcRootsDir);
         }
 
         job.erase("namedConstituents");
 
         if (!aggregateJob.brokenJobs.empty()) {
-            std::stringstream errorStream;
-            for (const auto &[jobName, error] : aggregateJob.brokenJobs) {
-                errorStream << jobName << ": " << error << "\n";
-            }
-            job["error"] = errorStream.str();
+            addBrokenJobsError(job, aggregateJob.brokenJobs);
         }
 
         std::cout << job.dump() << "\n" << std::flush;
