@@ -1,6 +1,5 @@
 #include <fnmatch.h>
 #include <cassert>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,6 +22,7 @@
 #include <nix/util/util.hh>
 
 #include "constituents.hh"
+#include "output-stream-lock.hh"
 
 namespace {
 // This is copied from `libutil/topo-sort.hh` in Nix and slightly modified.
@@ -257,6 +257,6 @@ void rewriteAggregates(std::map<std::string, nlohmann::json> &jobs,
             addBrokenJobsError(job, aggregateJob.brokenJobs);
         }
 
-        std::cout << job.dump() << "\n" << std::flush;
+        getCoutLock().lock() << job.dump() << "\n";
     }
 }

@@ -14,10 +14,8 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <nix/cmd/common-eval-args.hh>
 #include <nix/util/configuration.hh>
 #include <nix/util/error.hh>
@@ -25,7 +23,6 @@
 #include <nix/expr/eval-settings.hh>
 #include <nix/expr/eval.hh> // NOLINT(misc-header-include-cycle)
 #include <nix/util/file-descriptor.hh>
-#include <nix/util/file-system.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/settings.hh>
 #include <nix/util/fmt.hh>
@@ -58,6 +55,7 @@
 #include "buffered-io.hh"
 #include "worker.hh"
 #include "strings-portable.hh"
+#include "output-stream-lock.hh"
 #include "constituents.hh"
 #include "store.hh"
 
@@ -100,61 +98,18 @@ void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
                        jobs[cycle.a]["error"] = cycle.message();
                        jobs[cycle.b]["error"] = cycle.message();
 
-                       std::cout << jobs[cycle.a].dump() << "\n"
-                                 << jobs[cycle.b].dump() << "\n";
+                       getCoutLock().lock() << jobs[cycle.a].dump() << "\n"
+                                            << jobs[cycle.b].dump() << "\n";
 
                        for (const auto &jobName : cycle.remainingAggregates) {
                            jobs[jobName]["error"] =
                                "Skipping aggregate because of a dependency "
                                "cycle";
-                           std::cout << jobs[jobName].dump() << "\n";
+                           getCoutLock().lock() << jobs[jobName].dump() << "\n";
                        }
                    },
                },
                resolveNamedConstituents(jobs));
-}
-
-struct OutputStreamLock {
-  private:
-    std::mutex mutex;
-    std::ostream *stream;
-
-    struct LockedOutputStream {
-      public:
-        std::unique_lock<std::mutex> lock;
-        std::ostream *stream;
-        LockedOutputStream(std::mutex &mutex, std::ostream *stream)
-            : lock(mutex), stream(stream) {}
-        LockedOutputStream(const LockedOutputStream &) = delete;
-        LockedOutputStream(LockedOutputStream &&other) noexcept
-            : lock(std::move(other.lock)), stream(other.stream) {}
-        auto operator=(const LockedOutputStream &)
-            -> LockedOutputStream & = delete;
-        auto operator=(LockedOutputStream &&) -> LockedOutputStream & = delete;
-
-        template <class T>
-        auto operator<<(const T &value) && -> LockedOutputStream {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
-            *stream << value;
-            return std::move(*this);
-        }
-
-        ~LockedOutputStream() {
-            if (lock) {
-                *stream << std::flush;
-            }
-        }
-    };
-
-  public:
-    explicit OutputStreamLock(std::ostream &stream) : stream(&stream) {}
-
-    auto lock() -> LockedOutputStream { return {mutex, stream}; }
-};
-
-auto getCoutLock() -> OutputStreamLock & {
-    static OutputStreamLock coutLock(std::cout);
-    return coutLock;
 }
 
 /* Auto-cleanup of fork's process and fds. */

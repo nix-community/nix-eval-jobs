@@ -16,6 +16,7 @@
 #include <string>
 
 #include "eval-args.hh"
+#include "output-stream-lock.hh"
 #include <optional>
 
 MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
@@ -27,14 +28,15 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .category = "",
         .labels = {},
         .handler = {[&]() {
-            std::cout << "USAGE: nix-eval-jobs [options] expr\n\n";
+            getCoutLock().lock() << "USAGE: nix-eval-jobs [options] expr\n\n";
             for (const auto &[name, flag] : longFlags) {
                 if (hiddenCategories.contains(flag->category)) {
                     continue;
                 }
                 static constexpr int FLAG_WIDTH = 20;
-                std::cout << "  --" << std::left << std::setw(FLAG_WIDTH)
-                          << name << " " << flag->description << "\n";
+                getCoutLock().lock()
+                    << "  --" << std::left << std::setw(FLAG_WIDTH) << name
+                    << " " << flag->description << "\n";
             }
 
             ::exit(0); // NOLINT(concurrency-mt-unsafe)
