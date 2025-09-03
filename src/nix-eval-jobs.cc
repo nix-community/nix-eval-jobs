@@ -209,11 +209,12 @@ struct Thread {
         if (status != 0) {
             throw nix::SysError(status, "calling pthread_attr_setstacksize");
         }
-        status =
-            pthread_create(&thread, &attr, Thread::init, funcPtr.release());
+        status = pthread_create(&thread, &attr, Thread::init, funcPtr.get());
         if (status != 0) {
             throw nix::SysError(status, "calling pthread_launch");
         }
+        [[maybe_unused]] auto *res =
+            funcPtr.release(); // will be deleted in init()
     }
 
     void join() const {
