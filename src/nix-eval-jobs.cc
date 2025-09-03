@@ -354,6 +354,102 @@ auto joinAttrPath(nlohmann::json &attrPath) -> std::string {
     return joined;
 }
 
+namespace {
+auto checkWorkerStatus(LineReader *fromReader, Proc *proc) -> std::string_view {
+    auto line = fromReader->readLine();
+    if (line.empty()) {
+        handleBrokenWorkerPipe(*proc, "checking worker process");
+    }
+    if (line != "next" && line != "restart") {
+        try {
+            auto json = nlohmann::json::parse(line);
+            throw nix::Error("worker error: %s", std::string(json["error"]));
+        } catch (const nlohmann::json::exception &e) {
+            throw nix::Error(
+                "Received invalid JSON from worker: %s\n json: '%s'", e.what(),
+                line);
+        }
+    }
+    return line;
+}
+
+auto getNextJob(nix::Sync<State> &state_, std::condition_variable &wakeup,
+                Proc *proc) -> std::optional<nlohmann::json> {
+    nlohmann::json attrPath;
+    while (true) {
+        nix::checkInterrupt();
+        auto state(state_.lock());
+        if ((state->todo.empty() && state->active.empty()) || state->exc) {
+            if (tryWriteLine(proc->to.get(), "exit") < 0) {
+                handleBrokenWorkerPipe(*proc, "sending exit");
+            }
+            return std::nullopt;
+        }
+        if (!state->todo.empty()) {
+            attrPath = *state->todo.begin();
+            state->todo.erase(state->todo.begin());
+            state->active.insert(attrPath);
+            return attrPath;
+        }
+        state.wait(wakeup);
+    }
+}
+
+auto processWorkerResponse(LineReader *fromReader,
+                           const nlohmann::json &attrPath, Proc *proc,
+                           nix::Sync<State> &state_)
+    -> std::vector<nlohmann::json> {
+    // Read response from worker
+    auto respString = fromReader->readLine();
+    if (respString.empty()) {
+        auto msg = "reading result for attrPath '" +
+                   joinAttrPath(const_cast<nlohmann::json &>(attrPath)) + "'";
+        handleBrokenWorkerPipe(*proc, msg);
+    }
+
+    // Parse JSON response
+    nlohmann::json response;
+    try {
+        response = nlohmann::json::parse(respString);
+    } catch (const nlohmann::json::exception &e) {
+        throw nix::Error("Received invalid JSON from worker: %s\n json: '%s'",
+                         e.what(), respString);
+    }
+
+    // Process the response
+    std::vector<nlohmann::json> newAttrs;
+    if (response.find("attrs") != response.end()) {
+        for (const auto &attr : response["attrs"]) {
+            nlohmann::json newAttr = nlohmann::json(response["attrPath"]);
+            newAttr.emplace_back(attr);
+            newAttrs.push_back(newAttr);
+        }
+    } else {
+        {
+            auto state(state_.lock());
+            state->jobs.insert_or_assign(response["attr"], response);
+        }
+        auto named = response.find("namedConstituents");
+        if (named == response.end() || named->empty()) {
+            getCoutLock().lock() << respString << "\n";
+        }
+    }
+
+    return newAttrs;
+}
+
+void updateJobQueue(nix::Sync<State> &state_, std::condition_variable &wakeup,
+                    const nlohmann::json &attrPath,
+                    const std::vector<nlohmann::json> &newAttrs) {
+    auto state(state_.lock());
+    state->active.erase(attrPath);
+    for (const auto &newAttr : newAttrs) {
+        state->todo.insert(newAttr);
+    }
+    wakeup.notify_all();
+}
+} // namespace
+
 void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
     try {
         std::optional<std::unique_ptr<Proc>> proc_;
@@ -361,69 +457,40 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
 
         while (true) {
             // Initialize worker if needed
-            worker.ensureInitialized();
-            auto proc = worker.getProc();
-            auto fromReader = worker.getReader();
+            if (!proc_.has_value()) {
+                proc_ = std::make_unique<Proc>(worker);
+            }
+            if (!fromReader_.has_value()) {
+                fromReader_ =
+                    std::make_unique<LineReader>(proc_.value()->from.release());
+            }
 
-            // Check worker status
-            auto line = checkWorkerStatus(fromReader.get(), proc.get());
+            auto line = checkWorkerStatus(fromReader_.value().get(),
+                                          proc_.value().get());
             if (line == "restart") {
-                worker.reset();
+                // Reset worker
+                proc_ = std::nullopt;
+                fromReader_ = std::nullopt;
                 continue;
             }
 
-            /* Wait for a job name to become available. */
-            nlohmann::json attrPath;
-
-            while (true) {
-                nix::checkInterrupt();
-                auto state(state_.lock());
-                if ((state->todo.empty() && state->active.empty()) ||
-                    state->exc) {
-                    if (tryWriteLine(proc->to.get(), "exit") < 0) {
-                        handleBrokenWorkerPipe(*proc.get(), "sending exit");
-                    }
-                    return;
-                }
-                if (!state->todo.empty()) {
-                    attrPath = *state->todo.begin();
-                    state->todo.erase(state->todo.begin());
-                    state->active.insert(attrPath);
-                    break;
-                }
-                state.wait(wakeup);
+            auto maybeAttrPath =
+                getNextJob(state_, wakeup, proc_.value().get());
+            if (!maybeAttrPath.has_value()) {
+                return;
             }
+            auto attrPath = maybeAttrPath.value();
 
-            /* Tell the worker to evaluate it. */
-            if (tryWriteLine(proc->to.get(), "do " + attrPath.dump()) < 0) {
+            if (tryWriteLine(proc_.value()->to.get(), "do " + attrPath.dump()) <
+                0) {
                 auto msg = "sending attrPath '" + joinAttrPath(attrPath) + "'";
-                handleBrokenWorkerPipe(*proc.get(), msg);
+                handleBrokenWorkerPipe(*proc_.value(), msg);
             }
 
-            /* Wait for the response. */
-            auto respString = fromReader->readLine();
-            if (respString.empty()) {
-                auto msg = "reading result for attrPath '" +
-                           joinAttrPath(attrPath) + "'";
-                handleBrokenWorkerPipe(*proc.get(), msg);
-            }
-            nlohmann::json response;
-            try {
-                response = nlohmann::json::parse(respString);
-            } catch (const nlohmann::json::exception &e) {
-                throw nix::Error(
-                    "Received invalid JSON from worker: %s\n json: '%s'",
-                    e.what(), respString);
-            }
+            auto newAttrs =
+                processWorkerResponse(fromReader_.value().get(), attrPath,
+                                      proc_.value().get(), state_);
 
-            /* Handle the response. */
-            std::vector<nlohmann::json> newAttrs;
-            processResponse(response, respString, state_, newAttrs);
-
-            proc_ = std::move(proc);
-            fromReader_ = std::move(fromReader);
-
-            // Update job queue
             updateJobQueue(state_, wakeup, attrPath, newAttrs);
         }
     } catch (...) {
