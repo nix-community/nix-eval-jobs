@@ -70,12 +70,14 @@ USAGE: nix-eval-jobs [options] expr
   --log-format           Set the format of log output; one of `raw`, `internal-json`, `bar` or `bar-with-logs`.
   --max-memory-size      maximum evaluation memory size in megabyte (4GiB per worker by default)
   --meta                 include derivation meta field in output
+  --no-instantiate       don't instantiate (write) derivations, only evaluate (faster)
   --option               Set the Nix configuration setting *name* to *value* (overriding `nix.conf`).
   --override-flake       Override the flake registries, redirecting *original-ref* to *resolved-ref*.
   --override-input       Override a specific flake input (e.g. `dwarffs/nixpkgs`).
   --quiet                Decrease the logging verbosity level.
   --reference-lock-file  Read the given lock file instead of `flake.lock` within the top-level flake.
   --repair               During evaluation, rewrite missing or corrupted files in the Nix store. During building, rebuild missing or corrupted store paths.
+  --select               Apply provided Nix function to transform the evaluation root. This is applied before any attribute traversal begins. When used with --flake without a fragment, the function receives an attrset with 'outputs' and 'inputs'. When used with a flake fragment, it receives the selected attribute. Examples: --select 'flake: flake.outputs.packages' --select 'flake: flake.inputs.nixpkgs' --select 'outputs: outputs.packages.x86_64-linux'
   --show-input-drvs      Show input derivations in the output for each derivation. This is useful to get direct dependencies of a derivation.
   --show-trace           print out a stack trace in case of evaluation errors
   --verbose              Increase the logging verbosity level.
