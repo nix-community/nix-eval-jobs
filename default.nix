@@ -5,9 +5,12 @@
   pkgs,
 }:
 
+let
+  revision = "0";
+in
 stdenv.mkDerivation {
   pname = "nix-eval-jobs";
-  version = "2.30.0";
+  version = "${lib.versions.majorMinor nixComponents.nix-cli.version}.${revision}";
   src = lib.fileset.toSource {
     fileset = lib.fileset.unions [
       ./.clang-tidy
