@@ -67,12 +67,6 @@ using Processor = std::function<void(MyArgs &myArgs, nix::AutoCloseFD &toFd,
 
 void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
                         const MyArgs &args) {
-    // Early exit if in read-only/no-instantiate mode
-    if (args.noInstantiate) {
-        nix::warn("constituents feature disabled in no-instantiate mode, "
-                  "skipping aggregate rewriting");
-        return;
-    }
 
     auto store = nix_eval_jobs::openStore(args.evalStoreUrl);
     auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
@@ -465,6 +459,32 @@ void collector(nix::Sync<State> &state_, std::condition_variable &wakeup) {
         wakeup.notify_all();
     }
 }
+
+void validateIncompatibleFlags(const MyArgs &args) {
+    if (!args.noInstantiate) {
+        return;
+    }
+
+    const std::vector<std::pair<bool, std::string_view>> flagChecks = {
+        {args.showInputDrvs, "--show-input-drvs"},
+        {args.checkCacheStatus, "--check-cache-status"},
+        {args.constituents, "--constituents"}};
+
+    std::string incompatibleFlags;
+    for (const auto &[isSet, flagName] : flagChecks) {
+        if (isSet) {
+            incompatibleFlags +=
+                (incompatibleFlags.empty() ? "" : ", ") + std::string(flagName);
+        }
+    }
+
+    if (!incompatibleFlags.empty()) {
+        throw nix::UsageError(
+            nix::fmt("--no-instantiate is incompatible with: %s. "
+                     "These features require instantiated derivations.",
+                     incompatibleFlags));
+    }
+}
 } // namespace
 
 auto main(int argc, char **argv) -> int {
@@ -492,6 +512,8 @@ auto main(int argc, char **argv) -> int {
         nix::flakeSettings.configureEvalSettings(nix::evalSettings);
 
         myArgs.parseArgs(argv, argc);
+
+        validateIncompatibleFlags(myArgs);
 
         /* FIXME: The build hook in conjunction with import-from-derivation is
          * causing "unexpected EOF" during eval */
