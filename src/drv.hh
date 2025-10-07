@@ -1,5 +1,6 @@
 #include <nix/expr/get-drvs.hh>
 #include <nix/expr/eval.hh>
+#include <nix/util/types.hh>
 #include <nlohmann/json_fwd.hpp>
 // we need this include or otherwise we cannot instantiate std::optional
 #include <nlohmann/json.hpp> //NOLINT(misc-include-cleaner)
@@ -43,6 +44,8 @@ struct Drv {
 
     std::optional<std::map<std::string, std::set<std::string>>> inputDrvs =
         std::nullopt;
+
+    std::optional<nix::StringSet> requiredSystemFeatures = std::nullopt;
 
     // TODO: can we lazily allocate these?
     std::vector<std::string> neededBuilds;
