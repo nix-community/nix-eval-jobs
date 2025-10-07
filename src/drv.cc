@@ -143,12 +143,12 @@ auto queryCacheStatus(
         std::vector<const nix::StorePath *> willSubstituteSorted = {};
         std::ranges::for_each(missing.willSubstitute.begin(),
                               missing.willSubstitute.end(),
-                              [&](const nix::StorePath &path) {
+                              [&](const nix::StorePath &path) -> void {
                                   willSubstituteSorted.push_back(&path);
                               });
         std::ranges::sort(
             willSubstituteSorted.begin(), willSubstituteSorted.end(),
-            [](const nix::StorePath *lhs, const nix::StorePath *rhs) {
+            [](const nix::StorePath *lhs, const nix::StorePath *rhs) -> bool {
                 if (lhs->name() == rhs->name()) {
                     return lhs->to_string() < rhs->to_string();
                 }

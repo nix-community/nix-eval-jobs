@@ -7,7 +7,7 @@
 #include <stdio.h>  //NOLINT(modernize-deprecated-headers)
 #endif
 
-#if defined(__GLIBC__)
+#ifdef __GLIBC__
 #include <string.h> //NOLINT(modernize-deprecated-headers)
 
 // Linux with glibc specific: sigabbrev_np

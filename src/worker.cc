@@ -99,14 +99,15 @@ auto evaluateFlake(const nix::ref<nix::EvalState> &state,
 }
 
 auto attrPathJoin(nlohmann::json input) -> std::string {
-    return std::accumulate(input.begin(), input.end(), std::string(),
-                           [](const std::string &acc, std::string str) {
-                               // Escape token if containing dots
-                               if (str.find('.') != std::string::npos) {
-                                   str = "\"" + str + "\"";
-                               }
-                               return acc.empty() ? str : acc + "." + str;
-                           });
+    return std::accumulate(
+        input.begin(), input.end(), std::string(),
+        [](const std::string &acc, std::string str) -> std::basic_string<char> {
+            // Escape token if containing dots
+            if (str.find('.') != std::string::npos) {
+                str = "\"" + str + "\"";
+            }
+            return acc.empty() ? str : acc + "." + str;
+        });
 }
 
 auto extractConstituents(nix::EvalState &state, nix::Value *value,
@@ -143,17 +144,18 @@ auto extractConstituents(nix::EvalState &state, nix::Value *value,
             "while evaluating the `constituents` attribute", true, false);
 
         for (const auto &ctx : context) {
-            std::visit(nix::overloaded{
-                           [&](const nix::NixStringContextElem::Built &built) {
-                               constituents.push_back(
-                                   built.drvPath->to_string(*state.store));
-                           },
-                           [&](const nix::NixStringContextElem::Opaque &opaque
-                               [[maybe_unused]]) {},
-                           [&](const nix::NixStringContextElem::DrvDeep &drvDeep
-                               [[maybe_unused]]) {},
-                       },
-                       ctx.raw);
+            std::visit(
+                nix::overloaded{
+                    [&](const nix::NixStringContextElem::Built &built) -> void {
+                        constituents.push_back(
+                            built.drvPath->to_string(*state.store));
+                    },
+                    [&](const nix::NixStringContextElem::Opaque &opaque
+                        [[maybe_unused]]) -> void {},
+                    [&](const nix::NixStringContextElem::DrvDeep &drvDeep
+                        [[maybe_unused]]) -> void {},
+                },
+                ctx.raw);
         }
 
         // Extract named constituents
@@ -237,7 +239,7 @@ auto collectAttrsForRecursion(nix::EvalState &state, nix::Value *value,
 
         if (!args.forceRecurse && name == "recurseForDerivations") {
             const auto *attrv =
-                value->attrs()->get(state.s.recurseForDerivations);
+                value->attrs()->get(nix::EvalState::s.recurseForDerivations);
             recurse = state.forceBool(*attrv->value, attrv->pos,
                                       "while evaluating recurseForDerivations");
         }

@@ -44,7 +44,7 @@ auto topoSort(const std::set<AggregateJob> &items)
     std::function<void(const std::string &path, const std::string *parent)>
         dfsVisit;
 
-    dfsVisit = [&](const std::string &path, const std::string *parent) {
+    dfsVisit = [&](const std::string &path, const std::string *parent) -> void {
         if (parents.contains(path)) {
             dictIdentToObject.erase(path);
             dictIdentToObject.erase(*parent);
