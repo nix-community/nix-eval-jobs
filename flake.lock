@@ -23,16 +23,15 @@
     "nix": {
       "flake": false,
       "locked": {
-        "lastModified": 1756804961,
-        "narHash": "sha256-TUkkfeQnfI7569O7bWI/v01GJct0OPYydLwINC6ksRo=",
+        "lastModified": 1759793966,
+        "narHash": "sha256-h95Lz2j19/Sb9nuBM3BXUqlJgBkIZd15/QTkufajaLY=",
         "owner": "NixOS",
         "repo": "nix",
-        "rev": "e7540a269b3b711d67ae27b1bc2f93cc2d39eb21",
+        "rev": "eea6d75783e10e6057a097af29741c9a47cbb7e0",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "2.31-maintenance",
         "repo": "nix",
         "type": "github"
       }

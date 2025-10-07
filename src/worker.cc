@@ -237,7 +237,7 @@ auto collectAttrsForRecursion(nix::EvalState &state, nix::Value *value,
 
         if (!args.forceRecurse && name == "recurseForDerivations") {
             const auto *attrv =
-                value->attrs()->get(state.sRecurseForDerivations);
+                value->attrs()->get(state.s.recurseForDerivations);
             recurse = state.forceBool(*attrv->value, attrv->pos,
                                       "while evaluating recurseForDerivations");
         }
