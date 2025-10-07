@@ -62,6 +62,6 @@ LineReader::LineReader(LineReader &&other) noexcept
     nix::checkInterrupt();
 
     // Remove trailing newline
-    char *line = buffer.get();
+    char const *line = buffer.get();
     return {line, static_cast<size_t>(read) - 1};
 }

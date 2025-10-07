@@ -27,7 +27,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .description = "show usage information",
         .category = "",
         .labels = {},
-        .handler = {[&]() {
+        .handler = {[&]() -> void {
             getCoutLock().lock() << "USAGE: nix-eval-jobs [options] expr\n\n";
             for (const auto &[name, flag] : longFlags) {
                 if (hiddenCategories.contains(flag->category)) {
@@ -88,7 +88,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .description = "number of evaluate workers",
         .category = "",
         .labels = {"workers"},
-        .handler = {[this](const std::string &str) {
+        .handler = {[this](const std::string &str) -> void {
             nrWorkers = std::stoi(str);
         }},
         .completer = nullptr,
@@ -103,7 +103,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                        "(4GiB per worker by default)",
         .category = "",
         .labels = {"size"},
-        .handler = {[this](const std::string &str) {
+        .handler = {[this](const std::string &str) -> void {
             maxMemorySize = std::stoi(str);
         }},
         .completer = nullptr,
@@ -260,7 +260,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
         .category = category,
         .labels = {"input-path", "flake-url"},
         .handler = {[&](const std::string &inputPath,
-                        const std::string &flakeRef) {
+                        const std::string &flakeRef) -> void {
             // overriden inputs are unlocked
             lockFlags.allowUnlocked = true;
             lockFlags.inputOverrides.insert_or_assign(
@@ -281,7 +281,7 @@ MyArgs::MyArgs() : MixCommonArgs("nix-eval-jobs") {
                        "within the top-level flake.",
         .category = category,
         .labels = {"flake-lock-path"},
-        .handler = {[&](const std::string &lockFilePath) {
+        .handler = {[&](const std::string &lockFilePath) -> void {
             lockFlags.referenceLockFilePath = {
                 nix::getFSSourceAccessor(),
                 nix::CanonPath(nix::absPath(lockFilePath))};
