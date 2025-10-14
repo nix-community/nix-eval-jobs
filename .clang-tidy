@@ -12,6 +12,9 @@ Checks:
 
   # don't find them too problematic
   - -bugprone-easily-swappable-parameters
+
+  # crashes in clang-tidy 19
+  - -modernize-use-designated-initializers
 UseColor: true
 CheckOptions:
   misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: True

@@ -101,7 +101,7 @@
             clang-tidy-fix = self'.packages.nix-eval-jobs.overrideAttrs (old: {
               nativeBuildInputs = old.nativeBuildInputs ++ [
                 pkgs.git
-                (lib.hiPrio pkgs.llvmPackages_latest.clang-tools)
+                (lib.hiPrio pkgs.llvmPackages.clang-tools)
               ];
               buildPhase = ''
                 export HOME=$TMPDIR
