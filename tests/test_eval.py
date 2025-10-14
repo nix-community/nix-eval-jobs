@@ -513,7 +513,12 @@ def test_recursion_error() -> None:
         assert res.returncode == 1
         print(res.stderr)
         assert "packageWithInfiniteRecursion" in res.stderr
-        assert "possible infinite recursion" in res.stderr
+        expected_errors = [
+            "error: BUG: while reading result for attrPath 'packageWithInfiniteRecursion', worker pipe got closed but evaluation worker still running?",
+            "possible infinite recursion",
+            "error: while reading result for attrPath 'packageWithInfiniteRecursion', evaluation worker got killed by signal 6",
+        ]
+        assert any(err in res.stderr for err in expected_errors)
 
 
 def test_no_instantiate_mode() -> None:

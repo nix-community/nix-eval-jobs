@@ -27,7 +27,7 @@ in
   inherit (nix-eval-jobs) buildInputs;
   nativeBuildInputs = nix-eval-jobs.nativeBuildInputs ++ [
     (pkgs.python3.withPackages (ps: [ ps.pytest ]))
-    (lib.hiPrio pkgs.llvmPackages_latest.clang-tools)
+    (lib.hiPrio pkgs.llvmPackages.clang-tools)
   ];
 
   shellHook = lib.optionalString (stdenv.isLinux && nixComponents.nix-everything ? debug) ''

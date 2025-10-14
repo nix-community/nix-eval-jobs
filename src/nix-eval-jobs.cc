@@ -79,31 +79,32 @@ void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
 
     auto localStoreRef = nix::ref<nix::LocalFSStore>(localStore);
 
-    std::visit(nix::overloaded{
-                   [&](const std::vector<AggregateJob> &namedConstituents) {
-                       rewriteAggregates(jobs, namedConstituents, localStoreRef,
-                                         args.gcRootsDir);
-                   },
-                   [&](const DependencyCycle &cycle) {
-                       nix::logger->log(nix::lvlError,
-                                        nix::fmt("Found dependency cycle "
-                                                 "between jobs '%s' and '%s'",
-                                                 cycle.a, cycle.b));
-                       jobs[cycle.a]["error"] = cycle.message();
-                       jobs[cycle.b]["error"] = cycle.message();
+    std::visit(
+        nix::overloaded{
+            [&](const std::vector<AggregateJob> &namedConstituents) -> void {
+                rewriteAggregates(jobs, namedConstituents, localStoreRef,
+                                  args.gcRootsDir);
+            },
+            [&](const DependencyCycle &cycle) -> void {
+                nix::logger->log(nix::lvlError,
+                                 nix::fmt("Found dependency cycle "
+                                          "between jobs '%s' and '%s'",
+                                          cycle.a, cycle.b));
+                jobs[cycle.a]["error"] = cycle.message();
+                jobs[cycle.b]["error"] = cycle.message();
 
-                       getCoutLock().lock() << jobs[cycle.a].dump() << "\n"
-                                            << jobs[cycle.b].dump() << "\n";
+                getCoutLock().lock() << jobs[cycle.a].dump() << "\n"
+                                     << jobs[cycle.b].dump() << "\n";
 
-                       for (const auto &jobName : cycle.remainingAggregates) {
-                           jobs[jobName]["error"] =
-                               "Skipping aggregate because of a dependency "
-                               "cycle";
-                           getCoutLock().lock() << jobs[jobName].dump() << "\n";
-                       }
-                   },
-               },
-               resolveNamedConstituents(jobs));
+                for (const auto &jobName : cycle.remainingAggregates) {
+                    jobs[jobName]["error"] =
+                        "Skipping aggregate because of a dependency "
+                        "cycle";
+                    getCoutLock().lock() << jobs[jobName].dump() << "\n";
+                }
+            },
+        },
+        resolveNamedConstituents(jobs));
 }
 
 /* Auto-cleanup of fork's process and fds. */
@@ -126,7 +127,7 @@ struct Proc {
              toFd{std::make_shared<nix::AutoCloseFD>(
                  std::move(fromPipe.writeSide))},
              fromFd{std::make_shared<nix::AutoCloseFD>(
-                 std::move(toPipe.readSide))}]() {
+                 std::move(toPipe.readSide))}]() -> void {
                 nix::logger->log(
                     nix::lvlDebug,
                     nix::fmt("created worker process %d", getpid()));
@@ -506,7 +507,7 @@ auto main(int argc, char **argv) -> int {
 
     auto args = std::span(argv, argc);
 
-    return nix::handleExceptions(args[0], [&]() {
+    return nix::handleExceptions(args[0], [&]() -> void {
         nix::initNix();
         nix::initGC();
         nix::flakeSettings.configureEvalSettings(nix::evalSettings);
@@ -552,7 +553,7 @@ auto main(int argc, char **argv) -> int {
         threads.reserve(myArgs.nrWorkers);
         for (size_t i = 0; i < myArgs.nrWorkers; i++) {
             threads.emplace_back(
-                [&state_, &wakeup] { collector(state_, wakeup); });
+                [&state_, &wakeup] -> void { collector(state_, wakeup); });
         }
 
         for (auto &thread : threads) {
