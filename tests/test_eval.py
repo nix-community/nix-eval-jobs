@@ -70,6 +70,7 @@ def test_flake() -> None:
         assert "cacheStatus" not in result
         assert "neededBuilds" not in result
         assert "neededSubstitutes" not in result
+        assert "requiredSystemFeatures" in result
 
 
 def test_query_cache_status() -> None:
@@ -88,6 +89,10 @@ def test_expression() -> None:
     for result in results:
         assert "isCached" not in result  # legacy
         assert "cacheStatus" not in result
+        assert "requiredSystemFeatures" in result
+        if result["attr"] == "builtJob":
+            assert isinstance(result["requiredSystemFeatures"], list)
+            assert "big-parallel" in result["requiredSystemFeatures"]
 
     with open(TEST_ROOT.joinpath("assets/ci.nix")) as ci_nix:
         common_test(["-E", ci_nix.read()])
@@ -574,6 +579,9 @@ def test_no_instantiate_mode() -> None:
 
             # Input drvs should not be present (requires reading derivation from store)
             assert "inputDrvs" not in result
+
+            # Required system features should not be present (requires reading derivation from store)
+            assert "requiredSystemFeatures" not in result
 
         # Verify specific outputs for known derivations
         built_job = next(r for r in results if r["attr"] == "builtJob")

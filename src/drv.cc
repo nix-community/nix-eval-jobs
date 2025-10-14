@@ -4,6 +4,7 @@
 #include <nix/store/globals.hh>
 #include <nix/expr/value-to-json.hh>
 #include <nix/store/derivations.hh>
+#include <nix/store/derivation-options.hh>
 #include <nix/expr/get-drvs.hh>
 #include <nix/store/derived-path-map.hh>
 #include <nix/expr/eval.hh>
@@ -220,6 +221,11 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
         if (args.showInputDrvs) {
             inputDrvs = queryInputDrvs(drv, *store);
         }
+
+        auto drvOptions = nix::DerivationOptions::fromStructuredAttrs(
+            drv.env, drv.structuredAttrs);
+        requiredSystemFeatures =
+            std::optional(drvOptions.getRequiredSystemFeatures(drv));
     } else {
         // Fall back to basic info from PackageInfo
         // This happens when:
@@ -247,6 +253,10 @@ void to_json(nlohmann::json &json, const Drv &drv) {
     }
     if (drv.inputDrvs) {
         json["inputDrvs"] = drv.inputDrvs.value();
+    }
+
+    if (drv.requiredSystemFeatures) {
+        json["requiredSystemFeatures"] = drv.requiredSystemFeatures.value();
     }
 
     if (auto constituents = drv.constituents) {

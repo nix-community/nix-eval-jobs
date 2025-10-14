@@ -32,6 +32,7 @@ in
       "-c"
       "echo 'job1' > $out"
     ];
+    requiredSystemFeatures = [ "big-parallel" ];
   };
 
   dontRecurse = {
