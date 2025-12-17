@@ -222,8 +222,8 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             inputDrvs = queryInputDrvs(drv, *store);
         }
 
-        auto drvOptions = nix::DerivationOptions::fromStructuredAttrs(
-            drv.env, drv.structuredAttrs);
+        auto drvOptions = derivationOptionsFromStructuredAttrs(
+            *store, drv.env, get(drv.structuredAttrs));
         requiredSystemFeatures =
             std::optional(drvOptions.getRequiredSystemFeatures(drv));
     } else {
