@@ -109,8 +109,8 @@ void handleConstituents(std::map<std::string, nlohmann::json> &jobs,
 
 /* Auto-cleanup of fork's process and fds. */
 struct Proc {
-    nix::AutoCloseFD to{}, from{};
-    nix::Pid pid{};
+    nix::AutoCloseFD to, from;
+    nix::Pid pid;
 
     Proc(const Proc &) = delete;
     Proc(Proc &&) = delete;
@@ -233,9 +233,9 @@ struct Thread {
 struct State {
     std::set<nlohmann::json> todo =
         nlohmann::json::array({nlohmann::json::array()});
-    std::set<nlohmann::json> active{};
-    std::map<std::string, nlohmann::json> jobs{};
-    std::exception_ptr exc{};
+    std::set<nlohmann::json> active;
+    std::map<std::string, nlohmann::json> jobs;
+    std::exception_ptr exc;
 };
 
 void handleBrokenWorkerPipe(Proc &proc, std::string_view msg) {

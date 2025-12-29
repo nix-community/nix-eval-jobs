@@ -36,11 +36,11 @@ struct Drv {
     Drv(std::string &attrPath, nix::EvalState &state,
         nix::PackageInfo &packageInfo, MyArgs &args,
         std::optional<Constituents> constituents);
-    std::string name{};
-    std::string system{};
-    std::string drvPath{};
+    std::string name;
+    std::string system;
+    std::string drvPath;
 
-    std::map<std::string, std::optional<std::string>> outputs{};
+    std::map<std::string, std::optional<std::string>> outputs;
 
     std::optional<std::map<std::string, std::set<std::string>>> inputDrvs =
         std::nullopt;
@@ -48,9 +48,9 @@ struct Drv {
     std::optional<nix::StringSet> requiredSystemFeatures = std::nullopt;
 
     // TODO: can we lazily allocate these?
-    std::vector<std::string> neededBuilds{};
-    std::vector<std::string> neededSubstitutes{};
-    std::vector<std::string> unknownPaths{};
+    std::vector<std::string> neededBuilds;
+    std::vector<std::string> neededSubstitutes;
+    std::vector<std::string> unknownPaths;
 
     // TODO: we might not need to store this as it can be computed from the
     // above

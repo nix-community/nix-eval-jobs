@@ -188,14 +188,12 @@ auto queryCacheStatus(
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args,
          std::optional<Constituents> constituents)
-    : constituents(std::move(constituents)) {
+    : name(packageInfo.queryName()),
+      outputs(queryOutputs(packageInfo, state, attrPath)),
+      constituents(std::move(constituents)) {
 
     auto store = state.store;
 
-    name = packageInfo.queryName();
-
-    // Query outputs using helper function
-    outputs = queryOutputs(packageInfo, state, attrPath);
     drvPath = store->printStorePath(packageInfo.requireDrvPath());
 
     // Check if we can read derivations (requires LocalFSStore and not in

@@ -15,10 +15,10 @@ class MyArgs : virtual public nix::MixEvalArgs,
     static constexpr size_t DEFAULT_MAX_MEMORY_SIZE = 4096;
 
     virtual ~MyArgs() = default;
-    std::string releaseExpr{};
-    std::string applyExpr{};
-    std::string selectExpr{};
-    nix::Path gcRootsDir{};
+    std::string releaseExpr;
+    std::string applyExpr;
+    std::string selectExpr;
+    nix::Path gcRootsDir;
     bool flake = false;
     bool fromArgs = false;
     bool meta = false;

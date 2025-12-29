@@ -1,7 +1,8 @@
 {
   description = "Hydra's builtin hydra-eval-jobs as a standalone";
 
-  inputs.nixpkgs.url = "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz";
+  # https://github.com/NixOS/nixpkgs/pull/475078
+  inputs.nixpkgs.url = "github:Mic92/nixpkgs/clang-tidy-fix";
   inputs.nix = {
     url = "github:NixOS/nix/2.33-maintenance";
     # We want to control the deps precisely
