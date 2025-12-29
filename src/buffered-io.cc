@@ -9,8 +9,10 @@
 // NOLINTEND(modernize-deprecated-headers)
 #include <cstdio>
 #include <nix/util/error.hh>
+// NOLINTBEGIN(misc-header-include-cycle)
 #include <nix/util/signals.hh>
 #include <nix/util/signals-impl.hh>
+// NOLINTEND(misc-header-include-cycle)
 #include <string>
 #include <string_view>
 
@@ -38,6 +40,7 @@
 LineReader::LineReader(int file_descriptor)
     : stream(fdopen(file_descriptor, "r")) {
     if (stream == nullptr) {
+        // NOLINTNEXTLINE(clang-diagnostic-missing-designated-field-initializers)
         throw nix::Error("fdopen(%d) failed: %s", file_descriptor,
                          get_error_name(errno));
     }

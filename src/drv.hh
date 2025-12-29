@@ -59,9 +59,9 @@ struct Drv {
         Cached,
         NotBuilt,
         Unknown
-    } cacheStatus;
+    } cacheStatus = CacheStatus::Unknown;
 
-    std::optional<nlohmann::json> meta;
-    std::optional<Constituents> constituents;
+    std::optional<nlohmann::json> meta = std::nullopt;
+    std::optional<Constituents> constituents = std::nullopt;
 };
 void to_json(nlohmann::json &json, const Drv &drv);

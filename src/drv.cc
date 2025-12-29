@@ -20,6 +20,7 @@
 // required for std::optional
 #include <nix/util/json-utils.hh> //NOLINT(misc-include-cleaner)
 #include <nix/util/pos-idx.hh>
+#include <nix/util/util.hh> // for get()
 #include <exception>
 #include <map>
 #include <optional>
@@ -187,14 +188,12 @@ auto queryCacheStatus(
 Drv::Drv(std::string &attrPath, nix::EvalState &state,
          nix::PackageInfo &packageInfo, MyArgs &args,
          std::optional<Constituents> constituents)
-    : constituents(std::move(constituents)) {
+    : name(packageInfo.queryName()),
+      outputs(queryOutputs(packageInfo, state, attrPath)),
+      constituents(std::move(constituents)) {
 
     auto store = state.store;
 
-    name = packageInfo.queryName();
-
-    // Query outputs using helper function
-    outputs = queryOutputs(packageInfo, state, attrPath);
     drvPath = store->printStorePath(packageInfo.requireDrvPath());
 
     // Check if we can read derivations (requires LocalFSStore and not in
@@ -222,8 +221,8 @@ Drv::Drv(std::string &attrPath, nix::EvalState &state,
             inputDrvs = queryInputDrvs(drv, *store);
         }
 
-        auto drvOptions = nix::DerivationOptions::fromStructuredAttrs(
-            drv.env, drv.structuredAttrs);
+        auto drvOptions = derivationOptionsFromStructuredAttrs(
+            *store, drv.env, get(drv.structuredAttrs));
         requiredSystemFeatures =
             std::optional(drvOptions.getRequiredSystemFeatures(drv));
     } else {
