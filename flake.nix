@@ -4,7 +4,7 @@
   # https://github.com/NixOS/nixpkgs/pull/475078
   inputs.nixpkgs.url = "github:Mic92/nixpkgs/clang-tidy-fix";
   inputs.nix = {
-    url = "github:NixOS/nix/2.33-maintenance";
+    url = "github:NixOS/nix";
     # We want to control the deps precisely
     flake = false;
   };
