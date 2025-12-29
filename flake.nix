@@ -73,9 +73,9 @@
                     root = ./.;
                   };
 
-                  buildInputs = [
+                  nativeBuildInputs = [
                     self'.packages.nix-eval-jobs
-                    (pkgs.python3.withPackages (ps: [ ps.pytest ]))
+                    pkgs.python3.pkgs.pytest
                   ];
                 }
                 ''
@@ -94,7 +94,7 @@
                   export NIX_EVAL_JOBS_BIN=${self'.packages.nix-eval-jobs}/bin/nix-eval-jobs
 
                   # Run the tests
-                  python -m pytest tests/ -v
+                  pytest tests/ -v
 
                   # Create output marker
                   touch $out
