@@ -39,18 +39,15 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1767022868,
-        "narHash": "sha256-saHXoPx/ScMjWjcJREaOY1xVJWfdSFl2EU8yWjNnhw8=",
-        "owner": "Mic92",
-        "repo": "nixpkgs",
-        "rev": "91bc3381e467c2bdda0659bff9f7c5eaa5a1893a",
-        "type": "github"
+        "lastModified": 1767026758,
+        "narHash": "sha256-OuZZ71OA/6fZePPqgVinI4QVu9j1QCt+Q9i5ZgmSGqI=",
+        "rev": "346dd96ad74dc4457a9db9de4f4f57dab2e5731d",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixpkgs/nixpkgs-26.05pre918255.346dd96ad74d/nixexprs.tar.xz"
       },
       "original": {
-        "owner": "Mic92",
-        "ref": "clang-tidy-fix",
-        "repo": "nixpkgs",
-        "type": "github"
+        "type": "tarball",
+        "url": "https://nixos.org/channels/nixpkgs-unstable/nixexprs.tar.xz"
       }
     },
     "root": {
