@@ -6,7 +6,8 @@ src = [
   'constituents.cc',
   'worker.cc',
   'strings-portable.cc',
-  'output-stream-lock.cc'
+  'output-stream-lock.cc',
+  'daemon-settings.cc'
 ]
 
 executable(
