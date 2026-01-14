@@ -8,6 +8,7 @@
 
 #include <nix/util/config-global.hh>
 #include <nix/util/configuration.hh>
+#include <nix/util/types.hh>
 
 namespace {
 
@@ -31,9 +32,10 @@ struct DaemonSettings : nix::Config {
         )"};
 };
 
-DaemonSettings daemonSettings;
+DaemonSettings
+    daemonSettings; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-// NOLINTNEXTLINE(cert-err58-cpp)
+// NOLINTNEXTLINE(cert-err58-cpp,cppcoreguidelines-avoid-non-const-global-variables)
 nix::GlobalConfig::Register rDaemonSettings(&daemonSettings);
 
 } // namespace
